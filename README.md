@@ -350,8 +350,8 @@ parameters {
 
 ## Контакты и поддержка
 
-- Репозиторий тестов: [pm_volume-tests](https://stash.sigma.sbrf.ru/projects/RDB/repos/pm_volume-tests/browse)
-- Confluence: [Volume тестирование](https://confluence.sberbank.ru/pages/viewpage.action?pageId=18795895393)
+- Репозиторий тестов:
+- Confluence:
 - Документация Superset: https://superset.apache.org/
 - Документация Locust: https://docs.locust.io/
 
