@@ -1,4 +1,4 @@
-# Нагрузочное тестирование Сбер Process Mining (SPM)
+# Нагрузочное тестирование Superset Process Mining (SPM)
 
 ## Обзор проекта
 
