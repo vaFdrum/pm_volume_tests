@@ -1,0 +1,390 @@
+scenarios:
+  process_metrics:
+    - process_metrics
+  load_test:
+    - load_test
+  mixed:
+    - load_test
+    - process_metrics
+  default:
+    - process_metrics
+  tc_load_001:
+    - tc_load_001
+  tc_load_002:
+    - tc_load_002
+
+api:
+  base_url: FROM_ENV
+  flow_endpoint: "/etl/api/v1/flow/"
+
+upload_control:
+  timeout_small: 300  # 5 minutes
+  timeout_large: 3600  # 60 minutes
+  chunk_threshold: 200  # Chunks threshold for large files
+  pool_interval: 5  # Status check interval
+  pm_timeout: 3600  # 1 hour for Process Mining
+
+max_iterations: FROM_ENV  # По-умолчанию пользователь выполнит только 1 итерацию
+
+log_verbose: true
+log_debug: false
+log_level: "INFO"
+
+update_columns:
+  - column_name: "case_id"
+    column_type: "int"
+    column_use: true
+    id: 1
+  - column_name: "timestamp_start"
+    column_type: "date"
+    column_use: true
+    date_format: "yyyy-MM-dd HH:mm:ss"
+    id: 2
+  - column_name: "timestamp_end"
+    column_type: "date"
+    column_use: true
+    date_format: "yyyy-MM-dd HH:mm:ss"
+    id: 3
+  - column_name: "process"
+    column_type: "str"
+    column_use: true
+    id: 4
+  - column_name: "activity"
+    column_type: "str"
+    column_use: true
+    id: 5
+  - column_name: "duration_minutes"
+    column_type: "int"
+    column_use: true
+    id: 6
+  - column_name: "role"
+    column_type: "str"
+    column_use: true
+    id: 7
+  - column_name: "resource"
+    column_type: "str"
+    column_use: true
+    id: 8
+  - column_name: "anomaly"
+    column_type: "str"
+    column_use: true
+    id: 9
+  - column_name: "anomaly_type"
+    column_type: "str"
+    column_use: true
+    id: 10
+  - column_name: "rework"
+    column_type: "str"
+    column_use: true
+    id: 11
+  - column_name: "user_id"
+    column_type: "str"
+    column_use: true
+    id: 12
+  - column_name: "department"
+    column_type: "str"
+    column_use: true
+    id: 13
+  - column_name: "priority"
+    column_type: "str"
+    column_use: true
+    id: 14
+  - column_name: "cost"
+    column_type: "int"
+    column_use: true
+    id: 15
+  - column_name: "comment"
+    column_type: "str"
+    column_use: true
+    id: 16
+  - column_name: "resource_usage"
+    column_type: "int"
+    column_use: true
+    id: 17
+  - column_name: "processing_time"
+    column_type: "int"
+    column_use: true
+    id: 18
+  - column_name: "queue_time"
+    column_type: "int"
+    column_use: true
+    id: 19
+  - column_name: "success_rate"
+    column_type: "int"
+    column_use: true
+    id: 20
+  - column_name: "error_count"
+    column_type: "int"
+    column_use: true
+    id: 21
+  - column_name: "client_id"
+    column_type: "str"
+    column_use: true
+    id: 22
+  - column_name: "product_id"
+    column_type: "str"
+    column_use: true
+    id: 23
+  - column_name: "contract_id"
+    column_type: "str"
+    column_use: true
+    id: 24
+  - column_name: "branch_code"
+    column_type: "str"
+    column_use: true
+    id: 25
+  - column_name: "service_tier"
+    column_type: "str"
+    column_use: true
+    id: 26
+
+flow_template:
+  config:
+    blocks: []
+  dag: "spm_orchestrator"
+  flow_type: "spm_orchestrator"
+  retries: 1
+  schedule: "@never"
+  is_active: false
+  config_inactive:
+    blocks: []
+    chart_height: 288
+
+csv_file_path: FROM_ENV
+chunk_size: 4194304  # 4MB
+max_retries: 3
+retry_delay: 2
+request_timeout: 30
+
+upload_settings:
+  date_convert: true
+  default_timezone: "Europe/Moscow"
+  delimiter: ","
+  encoding: "UTF-8"
+  file_type: "CSV"
+  if_exists: "replace"
+  skip_rows: 0
+
+upload_columns:
+  - column_name: "case_id"
+    column_type: "int"
+    column_use: true
+    id: 1
+  - column_name: "timestamp_start"
+    column_type: "date"
+    column_use: true
+    date_format: "yyyy-MM-dd HH:mm:ss"
+    id: 2
+  - column_name: "timestamp_end"
+    column_type: "date"
+    column_use: true
+    date_format: "yyyy-MM-dd HH:mm:ss"
+    id: 3
+  - column_name: "process"
+    column_type: "str"
+    column_use: true
+    id: 4
+  - column_name: "activity"
+    column_type: "str"
+    column_use: true
+    id: 5
+  - column_name: "duration_minutes"
+    column_type: "int"
+    column_use: true
+    id: 6
+  - column_name: "role"
+    column_type: "str"
+    column_use: true
+    id: 7
+  - column_name: "resource"
+    column_type: "str"
+    column_use: true
+    id: 8
+  - column_name: "anomaly"
+    column_type: "str"
+    column_use: true
+    id: 9
+  - column_name: "anomaly_type"
+    column_type: "str"
+    column_use: true
+    id: 10
+  - column_name: "rework"
+    column_type: "str"
+    column_use: true
+    id: 11
+  - column_name: "user_id"
+    column_type: "str"
+    column_use: true
+    id: 12
+  - column_name: "department"
+    column_type: "str"
+    column_use: true
+    id: 13
+  - column_name: "priority"
+    column_type: "str"
+    column_use: true
+    id: 14
+  - column_name: "cost"
+    column_type: "int"
+    column_use: true
+    id: 15
+  - column_name: "comment"
+    column_type: "str"
+    column_use: true
+    id: 16
+  - column_name: "resource_usage"
+    column_type: "int"
+    column_use: true
+    id: 17
+  - column_name: "processing_time"
+    column_type: "int"
+    column_use: true
+    id: 18
+  - column_name: "queue_time"
+    column_type: "int"
+    column_use: true
+    id: 19
+  - column_name: "success_rate"
+    column_type: "int"
+    column_use: true
+    id: 20
+  - column_name: "error_count"
+    column_type: "int"
+    column_use: true
+    id: 21
+
+marking_config:
+  - key: "ID"
+    name: "case_id"
+    objectName: null
+  - key: "DATE"
+    name: "timestamp_start"
+    objectName: null
+  - key: "DATE_END"
+    name: "timestamp_end"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "process"
+    objectName: null
+  - key: "STATUS_NAME"
+    name: "activity"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "duration_minutes"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "role"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "resource"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "anomaly"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "anomaly_type"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "rework"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "user_id"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "department"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "priority"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "cost"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "comment"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "resource_usage"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "processing_time"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "queue_time"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "success_rate"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "error_count"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "client_id"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "product_id"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "contract_id"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "branch_code"
+    objectName: null
+  - key: "WITHOUT_KEY"
+    name: "service_tier"
+    objectName: null
+
+validation_types:
+  - "DUPLICATES"
+  - "START_END_DATE"
+  - "UNRECOGNIZED_VALUES_IN_KEY_FIELDS"
+
+block:
+  block_id: "spm_file_loader_v2[0]"
+  dag_id: "spm_file_loader_v2"
+
+monitoring:
+  enable_metrics: true
+  metrics_port: 9090
+  metrics_prefix: "superset_loadtest"
+  collect_interval: 15  # seconds
+
+# ClickHouse monitoring configuration
+clickhouse:
+  enabled: true
+  host: FROM_ENV  # CLICKHOUSE_HOST в .env
+  port: FROM_ENV  # CLICKHOUSE_PORT в .env (default: 8123)
+  user: FROM_ENV  # CLICKHOUSE_USER в .env (default: default)
+  password: FROM_ENV  # CLICKHOUSE_PASSWORD в .env
+  monitoring_interval: 10  # Интервал сбора метрик в секундах
+
+# Baseline metrics для сравнения (TC-LOAD-002, TC-LOAD-003, etc.)
+# Будут заполнены после получения отчётов TC-LOAD-001
+baseline_metrics:
+  "500mb":
+    file_size_mb: 500
+    csv_upload: 45.0  # placeholder
+    dag1_duration: 240.0  # placeholder
+    dag2_duration: 160.0  # placeholder
+    dashboard_load: 1.5  # placeholder
+  # "20gb":
+  #   file_size_mb: 20480
+  #   csv_upload: TBD
+  #   dag1_duration: TBD
+  #   dag2_duration: TBD
+  #   dashboard_load: TBD
+  # "30gb":
+  #   file_size_mb: 30720
+  #   csv_upload: TBD
+  #   dag1_duration: TBD
+  #   dag2_duration: TBD
+  #   dashboard_load: TBD
+  # "50gb":
+  #   file_size_mb: 51200
+  #   csv_upload: TBD
+  #   dag1_duration: TBD
+  #   dag2_duration: TBD
+  #   dashboard_load: TBD
+
+users:
+- password: FROM_ENV
+  username: userNT_1
