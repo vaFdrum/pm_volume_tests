@@ -1,5 +1,7 @@
 name: Claude Code Review
 
+direct_prompt: |
+  Пожалуйста, проверь этот pull request на наличие багов и проблем с безопасностью. Сообщай только о найденных ошибках и возможных уязвимостях. Будь краток.
 on:
   pull_request:
     types: [opened, synchronize]
