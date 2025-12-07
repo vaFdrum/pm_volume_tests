@@ -18,265 +18,94 @@ from common.api import Api
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
+from common.report_engine import MetricsCollector, ReportGenerator  # 🆕 Новая система отчетности
 from config import CONFIG
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-class TestMetricsCollector002:
-    """
-    Глобальный сборщик метрик для TC-LOAD-002.
-    Агрегирует данные от нескольких параллельных пользователей.
-    """
-
-    def __init__(self):
-        self.lock = Lock()
-        self.test_runs: List[Dict] = []
-        self.test_start_time = None
-        self.test_end_time = None
-        self.ch_monitor: Optional[ClickHouseMonitor] = None
-        self.baseline_metrics = None
-        self.locust_metrics: Optional[Dict] = None
-
-    def set_baseline_metrics(self, baseline: Dict):
-        """Устанавливает baseline метрики для сравнения"""
-        with self.lock:
-            self.baseline_metrics = baseline
-
-    def register_test_run(self, metrics: Dict):
-        """Регистрирует результаты одного test run"""
-        with self.lock:
-            self.test_runs.append(metrics)
-
-    def set_test_times(self, start_time: float, end_time: float):
-        """Устанавливает время начала и конца теста"""
-        with self.lock:
-            if self.test_start_time is None:
-                self.test_start_time = start_time
-            self.test_end_time = end_time
-
-    def set_clickhouse_monitor(self, monitor: ClickHouseMonitor):
-        """Устанавливает ClickHouse монитор"""
-        with self.lock:
-            if self.ch_monitor is None:
-                self.ch_monitor = monitor
-
-    def _calculate_baseline_comparison(self, metric_name: str, values: List[float]) -> Dict:
-        """Вычисляет сравнение с baseline и SLA validation"""
-        if not values or not self.baseline_metrics:
-            return {'avg': 0, 'sla_pass': 0, 'sla_total': 0, 'baseline_diff': 'N/A'}
-
-        avg_value = sum(values) / len(values)
-        baseline_value = self.baseline_metrics.get(metric_name, 0)
-
-        if baseline_value > 0:
-            # SLA: не более +50% от baseline
-            max_allowed = baseline_value * 1.5
-            sla_pass = sum(1 for v in values if v <= max_allowed)
-            diff_percent = ((avg_value - baseline_value) / baseline_value) * 100
-
-            return {
-                'avg': avg_value,
-                'baseline': baseline_value,
-                'max_allowed': max_allowed,
-                'sla_pass': sla_pass,
-                'sla_total': len(values),
-                'baseline_diff': f"{diff_percent:+.1f}%"
-            }
-
-        return {
-            'avg': avg_value,
-            'sla_pass': len(values),
-            'sla_total': len(values),
-            'baseline_diff': 'N/A'
-        }
-
-    def generate_summary(self) -> str:
-        """Генерирует итоговый отчёт по всем test runs"""
-        with self.lock:
-            if not self.test_runs:
-                return "\n[TC-LOAD-002] No test runs completed\n"
-
-            # Агрегируем метрики
-            total_runs = len(self.test_runs)
-            successful_runs = sum(1 for r in self.test_runs if r.get('success', False))
-            failed_runs = total_runs - successful_runs
-
-            # Группируем по пользователям
-            users = {}
-            for run in self.test_runs:
-                username = run.get('username', 'unknown')
-                if username not in users:
-                    users[username] = []
-                users[username].append(run)
-
-            # CSV Upload
-            csv_times = [r['csv_upload_duration'] for r in self.test_runs if 'csv_upload_duration' in r]
-            csv_stats = self._calculate_baseline_comparison('csv_upload', csv_times)
-            csv_min = min(csv_times) if csv_times else 0
-            csv_max = max(csv_times) if csv_times else 0
-
-            # DAG #1
-            dag1_times = [r['dag1_duration'] for r in self.test_runs if 'dag1_duration' in r]
-            dag1_stats = self._calculate_baseline_comparison('dag1_duration', dag1_times)
-            dag1_min = min(dag1_times) if dag1_times else 0
-            dag1_max = max(dag1_times) if dag1_times else 0
-
-            # DAG #2
-            dag2_times = [r['dag2_duration'] for r in self.test_runs if 'dag2_duration' in r]
-            dag2_stats = self._calculate_baseline_comparison('dag2_duration', dag2_times)
-            dag2_min = min(dag2_times) if dag2_times else 0
-            dag2_max = max(dag2_times) if dag2_times else 0
-
-            # Dashboard
-            dash_times = [r['dashboard_duration'] for r in self.test_runs if 'dashboard_duration' in r]
-            dash_stats = self._calculate_baseline_comparison('dashboard_load', dash_times)
-            dash_min = min(dash_times) if dash_times else 0
-            dash_max = max(dash_times) if dash_times else 0
-
-            # Total duration
-            total_times = [r['total_duration'] for r in self.test_runs if 'total_duration' in r]
-            total_avg = sum(total_times) / len(total_times) if total_times else 0
-
-            # Время теста
-            test_duration = self.test_end_time - self.test_start_time if self.test_start_time and self.test_end_time else 0
-
-            # Получаем первый run для конфигурации
-            first_run = self.test_runs[0]
-
-            lines = [
-                "",
-                "=" * 80,
-                "TC-LOAD-002: CONCURRENT LOAD TEST REPORT (3 USERS)",
-                "=" * 80,
-                "",
-                "ИНФОРМАЦИЯ О ТЕСТЕ",
-                "-" * 50,
-                f"Дата проведения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                f"Окружение: {CONFIG.get('api', {}).get('base_url', 'N/A')}",
-                f"Тип теста: Concurrent Load Test (3 users)",
-                f"Длительность теста: {test_duration:.2f}s ({test_duration/60:.1f} min)",
-                f"Всего запусков: {total_runs}",
-                f"Успешных: {successful_runs} ({successful_runs/total_runs*100:.1f}%)",
-                f"Неудачных: {failed_runs} ({failed_runs/total_runs*100:.1f}%)" if failed_runs > 0 else "",
-                f"Параллельных пользователей: {len(users)}",
-                "",
-                "КОНФИГУРАЦИЯ ТЕСТА",
-                "-" * 50,
-                f"Количество пользователей: 3 (concurrent)",
-                f"Размер файла: {first_run.get('file_size', 'N/A')}",
-                f"Количество строк: {first_run.get('total_lines', 0):,}",
-                f"Chunks: {first_run.get('total_chunks', 0)}",
-                "",
-                "РЕЗУЛЬТАТЫ ПРОИЗВОДИТЕЛЬНОСТИ",
-                "-" * 50,
-                f"CSV Upload Time:",
-                f"  Среднее: {csv_stats['avg']:.2f}s",
-                f"  Мин: {csv_min:.2f}s | Макс: {csv_max:.2f}s",
-                f"  Baseline: {csv_stats.get('baseline', 'N/A')}s | Отклонение: {csv_stats['baseline_diff']}",
-                "",
-                f"DAG #1 Duration (ClickHouse Import):",
-                f"  Среднее: {dag1_stats['avg']:.2f}s ({dag1_stats['avg']/60:.1f} min)",
-                f"  Мин: {dag1_min:.2f}s | Макс: {dag1_max:.2f}s",
-                f"  Baseline: {dag1_stats.get('baseline', 'N/A')}s | Отклонение: {dag1_stats['baseline_diff']}",
-                "",
-                f"DAG #2 Duration (PM Dashboard):",
-                f"  Среднее: {dag2_stats['avg']:.2f}s ({dag2_stats['avg']/60:.1f} min)",
-                f"  Мін: {dag2_min:.2f}s | Макс: {dag2_max:.2f}s",
-                f"  Baseline: {dag2_stats.get('baseline', 'N/A')}s | Отклонение: {dag2_stats['baseline_diff']}",
-                "",
-                f"Dashboard Load:",
-                f"  Среднее: {dash_stats['avg']:.2f}s",
-                f"  Мин: {dash_min:.2f}s | Макс: {dash_max:.2f}s",
-                f"  Baseline: {dash_stats.get('baseline', 'N/A')}s | Отклонение: {dash_stats['baseline_diff']}",
-                "",
-                f"Total Scenario Duration:",
-                f"  Среднее: {total_avg:.2f}s ({total_avg/60:.1f} min)",
-                "",
-            ]
-
-            # Per-user breakdown
-            lines.extend([
-                "РЕЗУЛЬТАТЫ ПО ПОЛЬЗОВАТЕЛЯМ",
-                "-" * 50,
-            ])
-
-            for username, user_runs in sorted(users.items()):
-                user_dag1 = [r['dag1_duration'] for r in user_runs if 'dag1_duration' in r]
-                user_dag2 = [r['dag2_duration'] for r in user_runs if 'dag2_duration' in r]
-
-                if user_dag1 and user_dag2:
-                    lines.extend([
-                        f"{username}:",
-                        f"  Запусков: {len(user_runs)}",
-                        f"  DAG #1 avg: {sum(user_dag1)/len(user_dag1):.2f}s",
-                        f"  DAG #2 avg: {sum(user_dag2)/len(user_dag2):.2f}s",
-                        "",
-                    ])
-
-            # Locust HTTP метрики (если доступны)
-            if self.locust_metrics:
-                lm = self.locust_metrics
-                lines.extend([
-                    "HTTP МЕТРИКИ (Locust Stats)",
-                    "-" * 50,
-                    f"Total Requests: {lm.get('total_requests', 0):,}",
-                    f"Total Failures: {lm.get('total_failures', 0):,}",
-                    f"RPS (средний): {lm.get('total_rps', 0):.2f} req/s",
-                    f"Response Time (средний): {lm.get('avg_response_time', 0):.0f} ms",
-                    f"Response Time (медиана): {lm.get('median_response_time', 0):.0f} ms",
-                    f"Response Time (P95): {lm.get('percentile_95', 0):.0f} ms",
-                    f"Response Time (P99): {lm.get('percentile_99', 0):.0f} ms",
-                    "",
-                ])
-
-            # SLA Validation
-            lines.extend([
-                "SLA VALIDATION (не более +50% от baseline)",
-                "-" * 50,
-                f"DAG #1: {dag1_stats['sla_pass']}/{dag1_stats['sla_total']} прошли "
-                f"({'✓ PASS' if dag1_stats['sla_pass'] == dag1_stats['sla_total'] else '✗ FAIL'})",
-                f"DAG #2: {dag2_stats['sla_pass']}/{dag2_stats['sla_total']} прошли "
-                f"({'✓ PASS' if dag2_stats['sla_pass'] == dag2_stats['sla_total'] else '✗ FAIL'})",
-                "",
-            ])
-
-            # Добавляем ClickHouse метрики если есть
-            if self.ch_monitor:
-                lines.append(self.ch_monitor.format_summary_report())
-            else:
-                lines.extend([
-                    "CLICKHOUSE МЕТРИКИ",
-                    "-" * 50,
-                    "[ClickHouse monitoring disabled or unavailable]",
-                    "",
-                ])
-
-            lines.extend([
-                "РЕСУРСЫ СИСТЕМЫ",
-                "-" * 50,
-                "CPU (Airflow Worker): [manual input required]",
-                "Memory (Airflow Worker): [manual input required]",
-                "CPU (ClickHouse): [manual input required]",
-                "Memory (ClickHouse): [manual input required]",
-                "CPU (Superset): [manual input required]",
-                "Memory (Superset): [manual input required]",
-                "Airflow Queue: [manual monitoring required]",
-                "Superset UI Response: [manual monitoring required]",
-                "",
-                "=" * 80,
-            ])
-
-            return "\n".join(lines)
+# ============================================================================
+# 🆕 ENHANCED REPORTING SYSTEM
+# ============================================================================
+# Создаем глобальный collector для TC-LOAD-002 (Concurrent Test)
+# Используем новую систему с автоматическими percentiles, SLO tracking и baseline comparison
+_metrics_collector = MetricsCollector(test_name="TC-LOAD-002")
 
 
-# Глобальный collector для TC-LOAD-002
-_test_metrics_collector_002 = TestMetricsCollector002()
+# ============================================================================
+# 📊 SLO DEFINITIONS FOR TC-LOAD-002 (Concurrent Test)
+# ============================================================================
+# TC-LOAD-002 проверяет производительность при параллельной работе 3 пользователей
+# SLO критерий из README.md: "Не более +50% от baseline метрик"
+#
+# ⚙️ КАК НАСТРОИТЬ ПОСЛЕ ПОЛУЧЕНИЯ РЕАЛЬНЫХ ДАННЫХ:
+#
+# ШАГИ НАСТРОЙКИ:
+# 1. Запустите TC-LOAD-001 и получите baseline метрики
+# 2. Посмотрите в отчете TC-LOAD-001 значения P95 для каждой метрики
+# 3. Установите SLO для TC-LOAD-002 = P95_baseline * 1.5 (добавляем 50% как в README)
+# 4. Обновите значения ниже
+#
+# Пример расчета:
+#   TC-LOAD-001 отчет показывает "DAG #1 P95: 280.5s"
+#   TC-LOAD-002 SLO = 280.5 * 1.5 = 420.75 ≈ 425 секунд
+#   Это означает: при 3 параллельных пользователях допустимо замедление до +50%
+#
+# 📌 ВАЖНО: Сначала запустите TC-LOAD-001 для получения baseline!
+# ============================================================================
+
+# SLO #1: DAG #1 Duration для Concurrent теста
+# 📝 Описание: Время импорта CSV в ClickHouse при 3 параллельных пользователях
+# 🎯 Текущий порог: 450 секунд (300s baseline * 1.5)
+# 📊 Baseline из TC-LOAD-001: 300s (из README.md)
+# ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
+_metrics_collector.define_slo(
+    name="dag1_duration",
+    threshold=450,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 1.5
+    comparison="less_than"
+)
+
+# SLO #2: DAG #2 Duration для Concurrent теста
+# 📝 Описание: Время создания PM дашборда при 3 параллельных пользователях
+# 🎯 Текущий порог: 270 секунд (180s baseline * 1.5)
+# 📊 Baseline из TC-LOAD-001: 180s (из README.md)
+# ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
+_metrics_collector.define_slo(
+    name="dag2_duration",
+    threshold=270,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 1.5
+    comparison="less_than"
+)
+
+# SLO #3: Dashboard Load для Concurrent теста
+# 📝 Описание: Время загрузки дашборда при 3 параллельных пользователях
+# 🎯 Текущий порог: 4.5 секунд (3s baseline * 1.5)
+# 📊 Baseline из TC-LOAD-001: 3s (из README.md)
+# ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
+_metrics_collector.define_slo(
+    name="dashboard_duration",
+    threshold=4.5,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 1.5
+    comparison="less_than"
+)
+
+# ============================================================================
+# 📊 BASELINE METRICS SETUP
+# ============================================================================
+# Baseline метрики автоматически загружаются из config_multi.yaml
+# См. секцию 'baseline_metrics' в config файле
+#
+# После запуска TC-LOAD-001 обновите config_multi.yaml:
+# baseline_metrics:
+#   "500mb":
+#     csv_upload: <значение из TC-LOAD-001>
+#     dag1_duration: <значение из TC-LOAD-001>
+#     dag2_duration: <значение из TC-LOAD-001>
+#     dashboard_load: <значение из TC-LOAD-001>
+# ============================================================================
 
 
-def get_metrics_collector_002() -> TestMetricsCollector002:
+def get_metrics_collector_002() -> MetricsCollector:
     """Возвращает глобальный metrics collector для TC-LOAD-002"""
-    return _test_metrics_collector_002
+    return _metrics_collector
 
 
 class TC_LOAD_002_Concurrent(Api):
@@ -666,7 +495,12 @@ def on_test_stop_002(environment, **kwargs):
 
     collector = get_metrics_collector_002()
 
-    # Загружаем baseline метрики если ещё не загружены
+    # ============================================================================
+    # 📊 ЗАГРУЗКА BASELINE METRICS
+    # ============================================================================
+    # Загружаем baseline метрики из config_multi.yaml для сравнения
+    # Это позволяет увидеть отклонение от TC-LOAD-001 baseline
+    # ============================================================================
     if collector.baseline_metrics is None:
         baseline_config = CONFIG.get('baseline_metrics', {})
         if baseline_config:
@@ -676,7 +510,7 @@ def on_test_stop_002(environment, **kwargs):
                 if csv_path and os.path.exists(csv_path):
                     size_mb = os.path.getsize(csv_path) / (1024 * 1024)
 
-                    # Ищем ближайший baseline по размеру
+                    # Ищем ближайший baseline по размеру файла
                     selected_baseline = None
                     min_diff = float('inf')
 
@@ -689,8 +523,9 @@ def on_test_stop_002(environment, **kwargs):
 
                     if selected_baseline:
                         collector.set_baseline_metrics(selected_baseline)
+                        print(f"[TC-LOAD-002] Loaded baseline metrics from config: {selected_baseline}")
             except Exception as e:
-                pass
+                print(f"[TC-LOAD-002] Warning: Could not load baseline metrics: {e}")
 
     # Останавливаем ClickHouse мониторинг если есть
     if collector.ch_monitor:
@@ -710,16 +545,32 @@ def on_test_stop_002(environment, **kwargs):
     }
     collector.locust_metrics = locust_metrics
 
-    # Генерируем и выводим общий summary
-    summary = collector.generate_summary()
-    print(summary)
+    # ============================================================================
+    # 🆕 ГЕНЕРАЦИЯ ENHANCED ОТЧЕТОВ
+    # ============================================================================
+    # Используем новую систему отчетности с:
+    # - Автоматическими percentiles (P50, P75, P90, P95, P99)
+    # - SLO compliance tracking
+    # - Baseline comparison (отклонение от TC-LOAD-001)
+    # - Error analysis
+    # - Smart recommendations
+    # - Per-user breakdown
+    # - Multiple formats: Text, JSON, CSV
+    # ============================================================================
 
-    # Сохраняем в файл
+    # Генерируем отчеты с помощью ReportGenerator
+    generator = ReportGenerator(collector)
+
+    # Выводим текстовый отчет в консоль
+    text_report = generator.generate_text_report()
+    print("\n" + text_report)
+
+    # Сохраняем все форматы отчетов (Text, JSON, CSV)
     try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = f"./logs/tc_load_002_report_{timestamp}.txt"
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(summary)
-        print(f"\n[TC-LOAD-002] Report saved to: {report_path}\n")
+        saved_files = generator.save_reports(output_dir="./logs")
+        print(f"\n[TC-LOAD-002] ✓ Successfully saved {len(saved_files)} report files:")
+        for filepath in saved_files:
+            print(f"  - {filepath}")
+        print()
     except Exception as e:
-        print(f"\n[TC-LOAD-002] Failed to save report: {e}\n")
+        print(f"\n[TC-LOAD-002] ✗ Failed to save reports: {e}\n")
