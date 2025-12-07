@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 15s      # Как часто собирать метрики
+  evaluation_interval: 15s  # Как часто проверять правила
+  external_labels:
+    monitor: 'superset-loadtest'
+
+# Правила оповещений (если нужны)
+rule_files:
+  # - "alert.rules"
+
+# Конфигурация сбора метрик
+scrape_configs:
+  # Метрики Locust нагрузочного теста
+  - job_name: 'superset-loadtest'
+    static_configs:
+      - targets: ['localhost:9090']  # Ваш сервер метрик
+    metrics_path: '/metrics'
+    scrape_interval: 5s              # Частый сбор для нагрузочного теста
+    honor_labels: true
+
+  # Метрики самого Locust (если нужно)
+  - job_name: 'locust-master'
+    static_configs:
+      - targets: ['localhost:8089']  # Locust web interface
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Метрики системы (опционально)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']  # Node exporter
+    scrape_interval: 30s
+
+# Дополнительные настройки
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Remote write (если используете удаленное хранение)
+remote_write:
+  # - url: "http://remote-write:9090/write"
