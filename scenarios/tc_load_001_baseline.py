@@ -504,7 +504,7 @@ def on_test_stop(environment, **kwargs):
         if TC_LOAD_001_Baseline not in SupersetUser.tasks:
             return  # Этот тест не запущен, пропускаем
     except Exception:
-        pass  # Если не можем проверить - продолжаем
+        return  # Если не можем проверить - пропускаем (другой тест запущен)
 
     collector = get_metrics_collector()
 

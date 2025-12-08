@@ -86,14 +86,14 @@
 ```
 common/
 ├── report_engine.py       # Unified reporting engine (730 lines)
-├── report_examples.py     # Usage examples and demos (250 lines)
 
 docs/
 ├── REPORTING.md           # Comprehensive documentation (600 lines)
 └── CHANGELOG_REPORTING.md # This file
 
-tests/
-└── test_reporting_demo.py # Demo script showing capabilities
+scenarios/
+├── tc_load_001_baseline.py    # TC-LOAD-001 with integrated reporting
+└── tc_load_002_concurrent.py  # TC-LOAD-002 with integrated reporting
 
 logs/                      # Auto-created for reports
 ├── *_report_*.txt
@@ -210,8 +210,7 @@ RECOMMENDATIONS
 ### 🎓 Documentation
 
 - **Full Documentation**: `REPORTING.md`
-- **Usage Examples**: `common/report_examples.py`
-- **Demo Script**: `test_reporting_demo.py`
+- **Usage Examples**: См. `scenarios/tc_load_001_baseline.py` и `scenarios/tc_load_002_concurrent.py`
 
 ### 🔄 Migration Guide
 
