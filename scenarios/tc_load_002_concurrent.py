@@ -491,7 +491,7 @@ def on_test_stop_002(environment, **kwargs):
         if TC_LOAD_002_Concurrent not in SupersetUser.tasks:
             return  # Этот тест не запущен, пропускаем
     except Exception:
-        pass  # Если не можем проверить - продолжаем
+        return  # Если не можем проверить - пропускаем (другой тест запущен)
 
     collector = get_metrics_collector_002()
 

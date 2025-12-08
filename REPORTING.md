@@ -306,13 +306,10 @@ collector.define_slo("throughput", threshold=1000, comparison="greater_than")
 
 ## 🎓 Примеры
 
-Смотрите `common/report_examples.py` для полных примеров:
+Смотрите существующие тесты для примеров использования:
 
-- Базовое использование
-- Интеграция с Locust
-- Error tracking
-- Baseline comparison
-- Percentile tracking
+- `scenarios/tc_load_001_baseline.py` - Базовый тест с полной интеграцией reporting
+- `scenarios/tc_load_002_concurrent.py` - Concurrent тест с baseline comparison
 
 ## 🔄 Миграция с старой системы
 
@@ -403,5 +400,4 @@ collector.register_test_run({'dag1_duration': 240})  # То же имя в ме�
 ## 📚 Дополнительная информация
 
 - См. `common/report_engine.py` для полной документации API
-- См. `common/report_examples.py` для примеров использования
-- См. существующие тесты `scenarios/tc_load_001_baseline.py` для интеграции
+- См. существующие тесты `scenarios/tc_load_001_baseline.py` и `scenarios/tc_load_002_concurrent.py` для примеров интеграции
