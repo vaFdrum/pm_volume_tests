@@ -329,7 +329,7 @@ class TC_LOAD_002_Concurrent(Api):
             return
 
         # Проверяем, не инициализирован ли уже
-        if get_metrics_collector_002().ch_monitor is not None:
+        if get_metrics_collector_002().clickhouse_monitor is not None:
             self.log("[TC-LOAD-002] ClickHouse monitor already initialized by another user")
             return
 
@@ -693,9 +693,9 @@ def on_test_stop_002(environment, **kwargs):
                 pass
 
     # Останавливаем ClickHouse мониторинг если есть
-    if collector.ch_monitor:
-        collector.ch_monitor.stop_monitoring()
-        collector.ch_monitor.collect_final()
+    if collector.clickhouse_monitor:
+        collector.clickhouse_monitor.stop_monitoring()
+        collector.clickhouse_monitor.collect_final()
 
     # Собираем Locust stats для RPS и Response Time
     stats = environment.stats
