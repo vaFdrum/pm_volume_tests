@@ -509,9 +509,9 @@ def on_test_stop(environment, **kwargs):
     collector = get_metrics_collector()
 
     # Останавливаем ClickHouse мониторинг если есть
-    if collector.ch_monitor:
-        collector.ch_monitor.stop_monitoring()
-        collector.ch_monitor.collect_final()
+    if collector.clickhouse_monitor:
+        collector.clickhouse_monitor.stop_monitoring()
+        collector.clickhouse_monitor.collect_final()
 
     # Собираем Locust stats для RPS и Response Time
     stats = environment.stats
