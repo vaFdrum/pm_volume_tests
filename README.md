@@ -21,7 +21,8 @@ pm_volume-tests/
 │   ├── load_test.py           # Базовый сценарий загрузки
 │   ├── process_metrics.py     # Process Mining дашборды
 │   ├── tc_load_001_baseline.py # Baseline тест (1 пользователь)
-│   └── tc_load_002_concurrent.py # Concurrent тест (3 пользователя)
+│   ├── tc_load_002_concurrent.py # Concurrent тест (3 пользователя)
+│   └── tc_load_003_peak.py    # Peak Concurrent тест (5 Heavy + 3 Light)
 ├── .env                        # Переменные окружения
 ├── config.py                   # Загрузчик конфигурации
 ├── config_multi.yaml          # Основная конфигурация
@@ -59,6 +60,43 @@ locust -u 3 -r 3 --headless -t 30m
 ```
 
 **SLA критерии:** Не более +50% от baseline метрик.
+
+### TC-LOAD-003: Peak Concurrent Load Test
+
+**Цель:** Проверить систему при максимальной пиковой нагрузке с разделением пользователей на Heavy (ETL) и Light (Superset UI).
+
+```bash
+# Запуск (5 Heavy + 3 Light = 8 users total)
+locust -f locustfile.py --tags tc_load_003 -u 8 -r 8 --host=https://your-superset.com
+```
+
+**Архитектура теста:**
+
+Heavy Users (5 пользователей) - ETL Operations:
+- CSV Upload → DAG#1 (ClickHouse Import) → DAG#2 (PM Dashboard) → Dashboard Open
+- Работают независимо (без координации между собой)
+- Каждый создаёт полный ETL pipeline
+- Регистрируют созданные дашборды для Light users
+
+Light Users (3 пользователя) - Superset UI Operations:
+- Ждут появления дашбордов от Heavy users
+- Работают в цикле:
+  * Открытие дашбордов (weight=5)
+  * Применение фильтров (weight=3)
+  * Экспорт данных (weight=2)
+- Создают нагрузку на Superset UI
+
+**SLA критерии:**
+- Heavy Users: Success rate > 95%
+- Heavy Users: DAG#1/DAG#2 < baseline × 2
+- Light Users: Dashboard response time < 10s для 95% запросов
+- Отсутствие сбоев сервисов
+
+**Особенности:**
+- Двухтипная архитектура пользователей (Heavy + Light)
+- DashboardPool для координации (Heavy регистрируют, Light используют)
+- Comprehensive метрики для обоих типов пользователей
+- Thread-safe операции с глобальным состоянием
 
 ### Другие сценарии:
 - **load_test**: Базовый сценарий многопользовательской загрузки
@@ -127,8 +165,24 @@ locust -u 1 -r 1 --headless -t 30m
 **Concurrent тест (три пользователя):**
 
 ```bash
-export LOCUST_SCENARIO=tc_load_002
-locust -u 3 -r 3 --headless -t 30m
+locust -f locustfile.py --tags tc_load_002 -u 3 -r 3 --headless -t 30m
+```
+
+**Peak Concurrent тест (5 Heavy + 3 Light пользователей):**
+
+```bash
+locust -f locustfile.py --tags tc_load_003 -u 8 -r 8 --headless -t 60m
+```
+
+**С указанием конкретного сценария:**
+
+```bash
+# Использование переменной окружения
+export LOCUST_SCENARIO=tc_load_001
+locust -f locustfile.py -u 1 -r 1
+
+# Или через параметр
+locust -f locustfile.py --scenario tc_load_002 -u 3 -r 3
 ```
 
 **С веб-интерфейсом Locust:**
@@ -233,13 +287,18 @@ curl http://localhost:9090/metrics
 ./logs/tc_load_002_runs_20241205_150045.csv
 ```
 
+**Для TC-LOAD-003:**
+```
+./logs/tc_load_003_report_20241205_160022.txt
+```
+
 **Отчет включает:**
 - **Performance Metrics**: автоматические percentiles (P50, P75, P90, P95, P99)
 - **SLO Compliance**: Pass/Fail критерии для CI/CD
 - **Baseline Comparison**: сравнение с эталонными метриками (TC-LOAD-002)
 - **ClickHouse Metrics**: метрики базы данных
 - **Locust Statistics**: RPS, response times
-- **User Breakdown**: per-user производительность
+- **User Breakdown**: per-user производительность (включая отдельные метрики для Heavy и Light users в TC-LOAD-003)
 - **Smart Recommendations**: автоматические рекомендации по оптимизации
 
 **📚 Подробная документация:** См. [REPORTING.md](REPORTING.md)
