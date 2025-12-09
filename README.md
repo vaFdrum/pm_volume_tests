@@ -20,7 +20,8 @@ pm_volume-tests/
 │   ├── load_test.py           # Базовый сценарий загрузки
 │   ├── process_metrics.py     # Process Mining дашборды
 │   ├── tc_load_001_baseline.py # Baseline тест (1 пользователь)
-│   └── tc_load_002_concurrent.py # Concurrent тест (3 пользователя)
+│   ├── tc_load_002_concurrent.py # Concurrent тест (3 пользователя)
+│   └── tc_load_003_peak.py    # Peak Concurrent тест (5 Heavy + 3 Light)
 ├── .env                        # Переменные окружения
 ├── config.py                   # Загрузчик конфигурации
 ├── config_multi.yaml          # Основная конфигурация
@@ -56,6 +57,43 @@ locust -f locustfile.py --tags tc_load_002 -u 3 -r 3 --host=https://your-superse
 ```
 
 **SLA критерии:** Не более +50% от baseline метрик.
+
+### TC-LOAD-003: Peak Concurrent Load Test
+
+**Цель:** Проверить систему при максимальной пиковой нагрузке с разделением пользователей на Heavy (ETL) и Light (Superset UI).
+
+```bash
+# Запуск (5 Heavy + 3 Light = 8 users total)
+locust -f locustfile.py --tags tc_load_003 -u 8 -r 8 --host=https://your-superset.com
+```
+
+**Архитектура теста:**
+
+Heavy Users (5 пользователей) - ETL Operations:
+- CSV Upload → DAG#1 (ClickHouse Import) → DAG#2 (PM Dashboard) → Dashboard Open
+- Работают независимо (без координации между собой)
+- Каждый создаёт полный ETL pipeline
+- Регистрируют созданные дашборды для Light users
+
+Light Users (3 пользователя) - Superset UI Operations:
+- Ждут появления дашбордов от Heavy users
+- Работают в цикле:
+  * Открытие дашбордов (weight=5)
+  * Применение фильтров (weight=3)
+  * Экспорт данных (weight=2)
+- Создают нагрузку на Superset UI
+
+**SLA критерии:**
+- Heavy Users: Success rate > 95%
+- Heavy Users: DAG#1/DAG#2 < baseline × 2
+- Light Users: Dashboard response time < 10s для 95% запросов
+- Отсутствие сбоев сервисов
+
+**Особенности:**
+- Двухтипная архитектура пользователей (Heavy + Light)
+- DashboardPool для координации (Heavy регистрируют, Light используют)
+- Comprehensive метрики для обоих типов пользователей
+- Thread-safe операции с глобальным состоянием
 
 ### Другие сценарии:
 - **load_test**: Базовый сценарий многопользовательской загрузки
@@ -124,6 +162,12 @@ locust -f locustfile.py --tags tc_load_001 -u 1 -r 1 --headless -t 30m
 
 ```bash
 locust -f locustfile.py --tags tc_load_002 -u 3 -r 3 --headless -t 30m
+```
+
+**Peak Concurrent тест (5 Heavy + 3 Light пользователей):**
+
+```bash
+locust -f locustfile.py --tags tc_load_003 -u 8 -r 8 --headless -t 60m
 ```
 
 **С указанием конкретного сценария:**
@@ -219,11 +263,18 @@ curl http://localhost:9090/metrics
 ./logs/tc_load_002_report_20241205_150045.txt
 ```
 
+**Для TC-LOAD-003:**
+```
+./logs/tc_load_003_report_20241205_160022.txt
+```
+
 **Отчет включает:**
 - Агрегированные метрики производительности
 - Сравнение с baseline (для TC-LOAD-002)
+- Separate метрики для Heavy и Light users (для TC-LOAD-003)
 - SLA валидацию
 - ClickHouse метрики
+- HTTP метрики (Locust stats)
 - Рекомендации по оптимизации
 
 ## Расширенные сценарии использования
