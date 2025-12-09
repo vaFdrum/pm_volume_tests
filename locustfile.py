@@ -110,6 +110,38 @@ def on_test_start_universal(environment, **kwargs):
         print(f"  - CSV File: {CONFIG.get('csv_file_path', 'N/A')}")
         print(
             f"  - ClickHouse Monitoring: {'Enabled' if CONFIG.get('clickhouse', {}).get('enabled', False) else 'Disabled'}")
+
+        # Показываем baseline info для TC-LOAD-003
+        baseline_config = CONFIG.get('baseline_metrics', {})
+        if baseline_config:
+            try:
+                import os
+                csv_path = CONFIG.get("csv_file_path", "")
+                if csv_path and os.path.exists(csv_path):
+                    size_mb = os.path.getsize(csv_path) / (1024 * 1024)
+
+                    # Ищем ближайший baseline
+                    selected_baseline = None
+                    min_diff = float('inf')
+
+                    for key, baseline in baseline_config.items():
+                        baseline_size = baseline.get('file_size_mb', 0)
+                        diff = abs(size_mb - baseline_size)
+                        if diff < min_diff:
+                            min_diff = diff
+                            selected_baseline = baseline
+
+                    if selected_baseline:
+                        print(f"  - Baseline: {selected_baseline.get('file_size_mb', 0)} MB "
+                              f"(DAG#1: {selected_baseline.get('dag1_duration', 0):.0f}s, "
+                              f"DAG#2: {selected_baseline.get('dag2_duration', 0):.0f}s)")
+                    else:
+                        print(f"  - Baseline: Not found for {size_mb:.1f} MB file")
+            except Exception as e:
+                print(f"  - Baseline: Error loading ({e})")
+        else:
+            print(f"  - Baseline: Not configured (add to config_multi.yaml)")
+
         print("=" * 80 + "\n")
 
     # Добавляй новые тесты здесь:
