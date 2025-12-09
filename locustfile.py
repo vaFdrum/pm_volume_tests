@@ -112,6 +112,10 @@ def on_test_start_universal(environment, **kwargs):
             f"  - ClickHouse Monitoring: {'Enabled' if CONFIG.get('clickhouse', {}).get('enabled', False) else 'Disabled'}")
         print("=" * 80 + "\n")
 
+    # Добавляй новые тесты здесь:
+    # elif TC_LOAD_XXX_XXX in SupersetUser.tasks:
+    #     print("TC-LOAD-XXX banner...")
+
     else:
         # Fallback для неизвестных тестов
         print("\n" + "=" * 80)
