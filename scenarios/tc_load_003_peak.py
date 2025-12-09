@@ -8,12 +8,14 @@ TC-LOAD-003: Peak Concurrent Load Test
 """
 
 import logging
+import os
 import random
+import threading
 import time
 import urllib3
 from datetime import datetime
 from typing import Optional, List, Dict
-from threading import Lock
+from threading import Lock, Event
 
 from locust import task, between, events
 
@@ -38,17 +40,19 @@ class DashboardPool:
     Как работает:
     - Heavy users после создания дашборда → добавляют в пул
     - Light users → берут случайный дашборд из пула для работы
-    - Потокобезопасно (threading.Lock)
+    - Потокобезопасно (threading.Lock + threading.Event)
     """
 
     def __init__(self):
         self.lock = Lock()
         self.dashboards: List[tuple] = []  # [(url, owner_username, created_timestamp)]
+        self.event = Event()  # Для эффективного ожидания появления дашбордов
 
     def add(self, url: str, owner: str):
         """Heavy user регистрирует созданный дашборд"""
         with self.lock:
             self.dashboards.append((url, owner, time.time()))
+            self.event.set()  # Сигнализируем ожидающим Light users
             print(f"[DashboardPool] Added dashboard from {owner}: {url}")
 
     def get_random(self) -> Optional[str]:
@@ -71,14 +75,10 @@ class DashboardPool:
     def wait_until_available(self, timeout=600) -> bool:
         """
         Light user ждёт появления дашбордов от Heavy users
+        Использует threading.Event для эффективного ожидания
         Возвращает True если дашборды появились, False если таймаут
         """
-        start = time.time()
-        while not self.has_dashboards():
-            if time.time() - start > timeout:
-                return False  # Таймаут
-            time.sleep(5)  # Проверяем каждые 5 секунд
-        return True
+        return self.event.wait(timeout)
 
 
 # Глобальный singleton
@@ -427,6 +427,7 @@ class TC_LOAD_003_Heavy(Api):
         """
         Инициализация ClickHouse монитора
         Только первый Heavy user инициализирует, остальные пропускают
+        Thread-safe с использованием Lock для предотвращения race condition
         """
         ch_config = CONFIG.get("clickhouse", {})
 
@@ -434,36 +435,38 @@ class TC_LOAD_003_Heavy(Api):
             self.log("[TC-LOAD-003][Heavy] ClickHouse monitoring disabled")
             return
 
-        # Проверяем, не инициализирован ли уже
-        if get_metrics_collector_003().ch_monitor is not None:
-            self.log("[TC-LOAD-003][Heavy] ClickHouse monitor already initialized by another user")
-            return
+        # Проверяем, не инициализирован ли уже (с Lock для thread-safety)
+        collector = get_metrics_collector_003()
+        with collector.lock:
+            if collector.ch_monitor is not None:
+                self.log("[TC-LOAD-003][Heavy] ClickHouse monitor already initialized by another user")
+                return
 
-        try:
-            self.ch_monitor = ClickHouseMonitor(
-                host=ch_config.get("host", "localhost"),
-                port=ch_config.get("port", 8123),
-                user=ch_config.get("user", "default"),
-                password=ch_config.get("password", ""),
-                monitoring_interval=ch_config.get("monitoring_interval", 10)
-            )
+            # Инициализируем только если монитора еще нет
+            try:
+                self.ch_monitor = ClickHouseMonitor(
+                    host=ch_config.get("host", "localhost"),
+                    port=ch_config.get("port", 8123),
+                    user=ch_config.get("user", "default"),
+                    password=ch_config.get("password", ""),
+                    monitoring_interval=ch_config.get("monitoring_interval", 10)
+                )
 
-            if self.ch_monitor.check_connection():
-                self.log("[TC-LOAD-003][Heavy] ClickHouse monitor initialized successfully")
-                # Регистрируем в глобальном collector
-                get_metrics_collector_003().set_clickhouse_monitor(self.ch_monitor)
-            else:
-                self.log("[TC-LOAD-003][Heavy] ClickHouse connection failed, monitoring disabled", logging.WARNING)
+                if self.ch_monitor.check_connection():
+                    self.log("[TC-LOAD-003][Heavy] ClickHouse monitor initialized successfully")
+                    # Регистрируем в глобальном collector (уже внутри Lock)
+                    collector.ch_monitor = self.ch_monitor
+                else:
+                    self.log("[TC-LOAD-003][Heavy] ClickHouse connection failed, monitoring disabled", logging.WARNING)
+                    self.ch_monitor = None
+
+            except Exception as e:
+                self.log(f"[TC-LOAD-003][Heavy] Failed to initialize ClickHouse monitor: {e}", logging.ERROR)
                 self.ch_monitor = None
-
-        except Exception as e:
-            self.log(f"[TC-LOAD-003][Heavy] Failed to initialize ClickHouse monitor: {e}", logging.ERROR)
-            self.ch_monitor = None
 
     def _format_file_size(self) -> str:
         """Форматирует размер файла для отчёта"""
         try:
-            import os
             csv_path = CONFIG.get("csv_file_path", "")
             if csv_path and os.path.exists(csv_path):
                 size_bytes = os.path.getsize(csv_path)
@@ -490,6 +493,18 @@ class TC_LOAD_003_Heavy(Api):
         else:
             self.log("[TC-LOAD-003][Heavy] Authentication failed", logging.ERROR)
             self.interrupt()
+
+    def _register_failure(self, reason: str):
+        """
+        Регистрирует неудачное выполнение сценария в метриках
+        Используется для всех early returns чтобы правильно считать success rate
+        """
+        get_metrics_collector_003().register_heavy_run({
+            'success': False,
+            'username': self.username,
+            'error': reason,
+        })
+        self.log(f"[TC-LOAD-003][Heavy][{self.username}] Scenario failed: {reason}", logging.ERROR)
 
     def on_start(self):
         """Инициализация Heavy user"""
@@ -530,7 +545,7 @@ class TC_LOAD_003_Heavy(Api):
         if not self.logged_in:
             self.establish_session()
             if not self.logged_in:
-                self.log("[TC-LOAD-003][Heavy] Failed to establish session", logging.ERROR)
+                self._register_failure("authentication_failed")
                 return
 
         self.log(f"[TC-LOAD-003][Heavy][{self.username}] Starting ETL scenario")
@@ -547,7 +562,7 @@ class TC_LOAD_003_Heavy(Api):
             self.flow_id = flow_id
 
             if not flow_id:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] Failed to create flow", logging.ERROR)
+                self._register_failure("flow_creation_failed")
                 return
 
             self.log(f"[TC-LOAD-003][Heavy][{self.username}] File flow created: {flow_name} (ID: {flow_id})")
@@ -555,7 +570,7 @@ class TC_LOAD_003_Heavy(Api):
             # 2. Получение параметров DAG
             target_connection, target_schema = self._get_dag_import_params(flow_id)
             if not target_connection or not target_schema:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] Missing DAG parameters", logging.ERROR)
+                self._register_failure("missing_dag_parameters")
                 return
 
             # 3. Обновление flow перед загрузкой
@@ -568,17 +583,17 @@ class TC_LOAD_003_Heavy(Api):
                 count_chunks_val=self.total_chunks,
             )
             if not update_resp or not update_resp.ok:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] Failed to update flow before upload", logging.ERROR)
+                self._register_failure("flow_update_failed")
                 return
 
             # 4. Получение ID базы данных пользователя
             db_id = self._get_user_database_id()
             if not db_id:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] User database not found", logging.ERROR)
+                self._register_failure("user_database_not_found")
                 return
 
             if self.total_chunks == 0:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] No chunks to upload", logging.WARNING)
+                self._register_failure("no_chunks_to_upload")
                 return
 
             timeout = (
@@ -590,6 +605,7 @@ class TC_LOAD_003_Heavy(Api):
             # 5. Начало загрузки
             csv_upload_start = time.time()
             if not self._start_file_upload(flow_id, db_id, target_schema, self.total_chunks, timeout):
+                self._register_failure("start_file_upload_failed")
                 return
 
             # 6. Загрузка чанков
@@ -600,6 +616,7 @@ class TC_LOAD_003_Heavy(Api):
 
             # 7. Финализация загрузки
             if not self._finalize_file_upload(flow_id, uploaded_chunks, timeout):
+                self._register_failure("finalize_file_upload_failed")
                 return
 
             # ========== DAG #1: File Processing (ClickHouse Import) ==========
@@ -611,6 +628,7 @@ class TC_LOAD_003_Heavy(Api):
                 flow_id, target_connection, target_schema, self.total_chunks, timeout
             )
             if not file_run_id:
+                self._register_failure("start_file_processing_failed")
                 return
 
             # 9. Мониторинг статуса обработки файла
@@ -621,7 +639,7 @@ class TC_LOAD_003_Heavy(Api):
             )
 
             if not success:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] DAG #1 processing failed", logging.ERROR)
+                self._register_failure("dag1_processing_failed")
                 return
 
             dag1_duration = time.time() - dag1_start
@@ -637,7 +655,7 @@ class TC_LOAD_003_Heavy(Api):
             # 10. Получаем параметры для PM блока
             source_connection, source_schema = self._get_dag_pm_params(flow_id)
             if not all([source_connection, source_schema]):
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] Missing PM DAG parameters", logging.ERROR)
+                self._register_failure("missing_pm_dag_parameters")
                 return
 
             # 11. Создаем PM flow
@@ -651,7 +669,7 @@ class TC_LOAD_003_Heavy(Api):
             )
 
             if not pm_flow_id:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] Failed to create Process Mining flow", logging.ERROR)
+                self._register_failure("pm_flow_creation_failed")
                 return
 
             self.pm_flow_id = pm_flow_id
@@ -664,7 +682,7 @@ class TC_LOAD_003_Heavy(Api):
             )
 
             if not pm_run_id:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] Failed to start Process Mining flow", logging.ERROR)
+                self._register_failure("start_pm_flow_failed")
                 return
 
             # 13. Мониторинг статуса Process Mining
@@ -674,7 +692,7 @@ class TC_LOAD_003_Heavy(Api):
             )
 
             if not (isinstance(pm_result, dict) and pm_result.get("success")):
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] DAG #2 processing failed", logging.ERROR)
+                self._register_failure("dag2_processing_failed")
                 return
 
             dag2_duration = time.time() - dag2_start
