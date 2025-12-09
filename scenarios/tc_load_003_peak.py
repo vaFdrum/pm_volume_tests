@@ -24,6 +24,7 @@ from common.api import Api
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
+from common.report_engine import MetricsCollector, ReportGenerator  # 🆕 Unified reporting system
 from config import CONFIG
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -91,281 +92,85 @@ def get_dashboard_pool_003() -> DashboardPool:
 
 
 # ============================================================================
-# СЕКЦИЯ 2: СБОРЩИК МЕТРИК
+# СЕКЦИЯ 2: UNIFIED METRICS COLLECTOR
+# ============================================================================
+# Используем MetricsCollector из report_engine.py для унифицированной отчётности
+# Один collector собирает метрики от обоих типов пользователей:
+# - Heavy users: ETL операции (с SLO validation и baseline comparison)
+# - Light users: Superset UI операции (только статистика)
 # ============================================================================
 
-class TestMetricsCollector003:
-    """
-    Собирает метрики от двух типов пользователей:
-    - Heavy: ETL операции (CSV, DAG#1, DAG#2)
-    - Light: Superset UI (dashboard load, filters, export)
-    """
-
-    def __init__(self):
-        self.lock = Lock()
-
-        # Heavy users метрики
-        self.heavy_runs: List[Dict] = []
-
-        # Light users метрики
-        self.light_runs: List[Dict] = []
-
-        # Общие метрики
-        self.test_start_time = None
-        self.test_end_time = None
-        self.ch_monitor: Optional[ClickHouseMonitor] = None
-        self.locust_metrics: Optional[Dict] = None
-
-    def register_heavy_run(self, metrics: Dict):
-        """Heavy user регистрирует результаты ETL"""
-        with self.lock:
-            self.heavy_runs.append(metrics)
-
-    def register_light_run(self, metrics: Dict):
-        """Light user регистрирует результаты UI взаимодействия"""
-        with self.lock:
-            self.light_runs.append(metrics)
-
-    def set_test_times(self, start_time: float, end_time: float):
-        """Устанавливает время начала и конца теста"""
-        with self.lock:
-            if self.test_start_time is None:
-                self.test_start_time = start_time
-            self.test_end_time = end_time
-
-    def set_clickhouse_monitor(self, monitor: ClickHouseMonitor):
-        """Устанавливает ClickHouse монитор"""
-        with self.lock:
-            if self.ch_monitor is None:
-                self.ch_monitor = monitor
-
-    def generate_summary(self) -> str:
-        """
-        Генерирует финальный отчёт с тремя секциями:
-        1. Heavy Users Performance (ETL Pipeline)
-        2. Light Users Performance (Superset UI)
-        3. System Resources & Validation
-        """
-
-        with self.lock:
-            if not self.heavy_runs and not self.light_runs:
-                return "\n[TC-LOAD-003] No test runs completed\n"
-
-            # ========== HEAVY USERS METRICS ==========
-            total_heavy = len(self.heavy_runs)
-            successful_heavy = sum(1 for r in self.heavy_runs if r.get('success', False))
-            failed_heavy = total_heavy - successful_heavy
-
-            # CSV Upload
-            csv_times = [r['csv_upload_duration'] for r in self.heavy_runs if 'csv_upload_duration' in r]
-            csv_avg = sum(csv_times) / len(csv_times) if csv_times else 0
-            csv_min = min(csv_times) if csv_times else 0
-            csv_max = max(csv_times) if csv_times else 0
-
-            # DAG #1
-            dag1_times = [r['dag1_duration'] for r in self.heavy_runs if 'dag1_duration' in r]
-            dag1_avg = sum(dag1_times) / len(dag1_times) if dag1_times else 0
-            dag1_min = min(dag1_times) if dag1_times else 0
-            dag1_max = max(dag1_times) if dag1_times else 0
-
-            # DAG #2
-            dag2_times = [r['dag2_duration'] for r in self.heavy_runs if 'dag2_duration' in r]
-            dag2_avg = sum(dag2_times) / len(dag2_times) if dag2_times else 0
-            dag2_min = min(dag2_times) if dag2_times else 0
-            dag2_max = max(dag2_times) if dag2_times else 0
-
-            # Dashboard Open (Heavy)
-            dash_heavy_times = [r['dashboard_duration'] for r in self.heavy_runs if 'dashboard_duration' in r]
-            dash_heavy_avg = sum(dash_heavy_times) / len(dash_heavy_times) if dash_heavy_times else 0
-
-            # Total duration (Heavy)
-            total_times = [r['total_duration'] for r in self.heavy_runs if 'total_duration' in r]
-            total_avg = sum(total_times) / len(total_times) if total_times else 0
-
-            # ========== LIGHT USERS METRICS ==========
-            total_light = len(self.light_runs)
-
-            # Aggregate light operations
-            total_opens = sum(r.get('dashboard_opens', 0) for r in self.light_runs)
-            total_filters = sum(r.get('filter_applies', 0) for r in self.light_runs)
-            total_exports = sum(r.get('exports', 0) for r in self.light_runs)
-
-            # Dashboard load times (Light)
-            all_load_times = []
-            for r in self.light_runs:
-                all_load_times.extend(r.get('dashboard_load_times', []))
-
-            load_avg = sum(all_load_times) / len(all_load_times) if all_load_times else 0
-            load_min = min(all_load_times) if all_load_times else 0
-            load_max = max(all_load_times) if all_load_times else 0
-
-            # Percentiles
-            if all_load_times:
-                sorted_times = sorted(all_load_times)
-                p95_idx = int(len(sorted_times) * 0.95)
-                p99_idx = int(len(sorted_times) * 0.99)
-                load_p95 = sorted_times[p95_idx] if p95_idx < len(sorted_times) else sorted_times[-1]
-                load_p99 = sorted_times[p99_idx] if p99_idx < len(sorted_times) else sorted_times[-1]
-            else:
-                load_p95 = load_p99 = 0
-
-            # Filter times
-            all_filter_times = []
-            for r in self.light_runs:
-                all_filter_times.extend(r.get('filter_times', []))
-            filter_avg = sum(all_filter_times) / len(all_filter_times) if all_filter_times else 0
-
-            # Export times
-            all_export_times = []
-            for r in self.light_runs:
-                all_export_times.extend(r.get('export_times', []))
-            export_avg = sum(all_export_times) / len(all_export_times) if all_export_times else 0
-
-            # ========== TEST DURATION ==========
-            test_duration = self.test_end_time - self.test_start_time if self.test_start_time and self.test_end_time else 0
-
-            # ========== BUILD REPORT ==========
-            lines = [
-                "",
-                "=" * 80,
-                "TC-LOAD-003: PEAK CONCURRENT LOAD TEST REPORT",
-                "=" * 80,
-                "",
-                "ИНФОРМАЦИЯ О ТЕСТЕ",
-                "-" * 50,
-                f"Дата проведения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                f"Окружение: {CONFIG.get('api', {}).get('base_url', 'N/A')}",
-                f"Тип теста: Peak Concurrent Load (5 Heavy + 3 Light)",
-                f"Длительность теста: {test_duration:.2f}s ({test_duration/60:.1f} min)",
-                "",
-                "КОНФИГУРАЦИЯ ТЕСТА",
-                "-" * 50,
-                f"Heavy Users: 5 (CSV Upload → DAG#1 → DAG#2 → Dashboard)",
-                f"Light Users: 3 (Dashboard interaction, filters, export)",
-                f"Synchronization: None (all users work independently)",
-                "",
-
-                # === HEAVY USERS SECTION ===
-                "HEAVY USERS PERFORMANCE (ETL Pipeline)",
-                "=" * 80,
-                f"Total Heavy Runs: {total_heavy}",
-                f"Successful: {successful_heavy} ({successful_heavy/total_heavy*100:.1f}%)" if total_heavy > 0 else "Successful: 0",
-                f"Failed: {failed_heavy} ({failed_heavy/total_heavy*100:.1f}%)" if failed_heavy > 0 else "",
-                "",
-                "CSV Upload Time:",
-                f"  Среднее: {csv_avg:.2f}s",
-                f"  Мин: {csv_min:.2f}s | Макс: {csv_max:.2f}s",
-                "",
-                "DAG #1 Duration (ClickHouse Import):",
-                f"  Среднее: {dag1_avg:.2f}s ({dag1_avg/60:.1f} min)",
-                f"  Мин: {dag1_min:.2f}s | Макс: {dag1_max:.2f}s",
-                "",
-                "DAG #2 Duration (PM Dashboard Creation):",
-                f"  Среднее: {dag2_avg:.2f}s ({dag2_avg/60:.1f} min)",
-                f"  Мін: {dag2_min:.2f}s | Макс: {dag2_max:.2f}s",
-                "",
-                "Dashboard Open (Heavy users):",
-                f"  Среднее: {dash_heavy_avg:.2f}s",
-                "",
-                "Total Scenario Duration (Heavy):",
-                f"  Среднее: {total_avg:.2f}s ({total_avg/60:.1f} min)",
-                "",
-
-                # === LIGHT USERS SECTION ===
-                "LIGHT USERS PERFORMANCE (Superset UI)",
-                "=" * 80,
-                f"Total Light Users: {total_light}",
-                f"Total Operations: {total_opens + total_filters + total_exports}",
-                f"  - Dashboard Opens: {total_opens}",
-                f"  - Filter Applications: {total_filters}",
-                f"  - Data Exports: {total_exports}",
-                "",
-                "Dashboard Load Time (Light users):",
-                f"  Среднее: {load_avg:.2f}s",
-                f"  Мин: {load_min:.2f}s | Макс: {load_max:.2f}s",
-                f"  P95: {load_p95:.2f}s | P99: {load_p99:.2f}s",
-                "",
-                "Filter Application Time:",
-                f"  Среднее: {filter_avg:.2f}s",
-                "",
-                "Data Export Time:",
-                f"  Среднее: {export_avg:.2f}s",
-                "",
-            ]
-
-            # === LOCUST METRICS ===
-            if self.locust_metrics:
-                lm = self.locust_metrics
-                lines.extend([
-                    "HTTP МЕТРИКИ (Locust Stats)",
-                    "-" * 50,
-                    f"Total Requests: {lm.get('total_requests', 0):,}",
-                    f"Total Failures: {lm.get('total_failures', 0):,}",
-                    f"RPS (средний): {lm.get('total_rps', 0):.2f} req/s",
-                    f"Response Time (средний): {lm.get('avg_response_time', 0):.0f} ms",
-                    f"Response Time (медиана): {lm.get('median_response_time', 0):.0f} ms",
-                    f"Response Time (P95): {lm.get('percentile_95', 0):.0f} ms",
-                    f"Response Time (P99): {lm.get('percentile_99', 0):.0f} ms",
-                    "",
-                ])
-
-            # === SLA VALIDATION ===
-            success_rate = (successful_heavy / total_heavy * 100) if total_heavy > 0 else 0
-            success_pass = success_rate > 95
-
-            superset_responsive = sum(1 for t in all_load_times if t < 10)
-            superset_total = len(all_load_times)
-            superset_pass = (superset_responsive / superset_total * 100) if superset_total > 0 else 0
-
-            lines.extend([
-                "SLA VALIDATION",
-                "-" * 50,
-                "Heavy Users (ETL):",
-                f"  ✓ Success rate > 95%: {success_rate:.1f}% ({'PASS' if success_pass else 'FAIL'})",
-                f"  ⚠ DAG#1 < baseline × 2: [Manual verification required]",
-                f"  ⚠ DAG#2 < baseline × 2: [Manual verification required]",
-                "",
-                "Light Users (Superset UI):",
-                f"  ✓ Response time < 10s: {superset_responsive}/{superset_total} ({superset_pass:.1f}%) {'PASS' if superset_pass > 95 else 'FAIL'}",
-                f"  ✓ No service crashes: [Manual verification required]",
-                "",
-            ])
-
-            # === CLICKHOUSE METRICS ===
-            if self.ch_monitor:
-                lines.append(self.ch_monitor.format_summary_report())
-            else:
-                lines.extend([
-                    "CLICKHOUSE МЕТРИКИ",
-                    "-" * 50,
-                    "[ClickHouse monitoring disabled or unavailable]",
-                    "",
-                ])
-
-            # === SYSTEM RESOURCES ===
-            lines.extend([
-                "РЕСУРСЫ СИСТЕМЫ (Peak Load)",
-                "-" * 50,
-                "CPU (Airflow Worker): [manual monitoring required]",
-                "Memory (Airflow Worker): [manual monitoring required]",
-                "CPU (ClickHouse): [manual monitoring required]",
-                "Memory (ClickHouse): [manual monitoring required]",
-                "CPU (Superset): [manual monitoring required]",
-                "Memory (Superset): [manual monitoring required]",
-                "Airflow Queue Depth: [manual monitoring required]",
-                "ClickHouse Concurrent Queries: [manual monitoring required]",
-                "",
-                "=" * 80,
-            ])
-
-            return "\n".join(lines)
+_metrics_collector_003 = MetricsCollector(test_name="TC-LOAD-003")
 
 
-# Глобальный collector
-_metrics_collector_003 = TestMetricsCollector003()
+# ============================================================================
+# 📊 SLO DEFINITIONS FOR TC-LOAD-003 (Peak Load Test)
+# ============================================================================
+# TC-LOAD-003 проверяет производительность при ПИКОВОЙ нагрузке (5 Heavy + 3 Light)
+# SLO критерий из README.md: "Не более ×2 от baseline метрик"
+#
+# ⚙️ КАК НАСТРОИТЬ ПОСЛЕ ПОЛУЧЕНИЯ BASELINE:
+#
+# ШАГИ НАСТРОЙКИ:
+# 1. Запустите TC-LOAD-001 и получите baseline метрики
+# 2. Посмотрите в отчете TC-LOAD-001 значения P95 для каждой метрики
+# 3. Установите SLO для TC-LOAD-003 = P95_baseline * 2.0 (удвоение допустимо при пике)
+# 4. Обновите значения ниже
+#
+# Пример расчета:
+#   TC-LOAD-001 отчет показывает "DAG #1 P95: 280.5s"
+#   TC-LOAD-003 SLO = 280.5 * 2.0 = 561 секунд
+#   Это означает: при пиковой нагрузке допустимо замедление до ×2
+#
+# 📌 ВАЖНО: SLO применяются ТОЛЬКО к Heavy users (ETL операциям)!
+# Light users - это дополнительная нагрузка, их метрики собираются только для статистики
+# ============================================================================
+
+# SLO #1: DAG #1 Duration для Peak теста (Heavy users only)
+# 📝 Описание: Время импорта CSV в ClickHouse при 5 Heavy + 3 Light пользователях
+# 🎯 Текущий порог: 600 секунд (300s baseline * 2.0)
+# 📊 Baseline из TC-LOAD-001: 300s (из README.md)
+# ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 2.0
+_metrics_collector_003.define_slo(
+    name="dag1_duration",
+    threshold=600,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 2.0
+    comparison="less_than"
+)
+
+# SLO #2: DAG #2 Duration для Peak теста (Heavy users only)
+# 📝 Описание: Время создания PM дашборда при 5 Heavy + 3 Light пользователях
+# 🎯 Текущий порог: 360 секунд (180s baseline * 2.0)
+# 📊 Baseline из TC-LOAD-001: 180s (из README.md)
+# ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 2.0
+_metrics_collector_003.define_slo(
+    name="dag2_duration",
+    threshold=360,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 2.0
+    comparison="less_than"
+)
+
+# SLO #3: Dashboard Load для Peak теста (Heavy users only)
+# 📝 Описание: Время загрузки дашборда при 5 Heavy + 3 Light пользователях
+# 🎯 Текущий порог: 6.0 секунд (3s baseline * 2.0)
+# 📊 Baseline из TC-LOAD-001: 3s (из README.md)
+# ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 2.0
+_metrics_collector_003.define_slo(
+    name="dashboard_duration",
+    threshold=6.0,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 2.0
+    comparison="less_than"
+)
+
+# ============================================================================
+# 📊 BASELINE METRICS SETUP
+# ============================================================================
+# Baseline метрики автоматически загружаются из config_multi.yaml
+# См. секцию 'baseline_metrics' в config файле
+#
+# Применяется ТОЛЬКО к Heavy users!
+# Light users не сравниваются с baseline - это просто доп. нагрузка
+# ============================================================================
 
 
-def get_metrics_collector_003() -> TestMetricsCollector003:
+def get_metrics_collector_003() -> MetricsCollector:
     """Возвращает глобальный metrics collector для TC-LOAD-003"""
     return _metrics_collector_003
 
@@ -438,7 +243,7 @@ class TC_LOAD_003_Heavy(Api):
         # Проверяем, не инициализирован ли уже (с Lock для thread-safety)
         collector = get_metrics_collector_003()
         with collector.lock:
-            if collector.ch_monitor is not None:
+            if collector.clickhouse_monitor is not None:
                 self.log("[TC-LOAD-003][Heavy] ClickHouse monitor already initialized by another user")
                 return
 
@@ -455,7 +260,7 @@ class TC_LOAD_003_Heavy(Api):
                 if self.ch_monitor.check_connection():
                     self.log("[TC-LOAD-003][Heavy] ClickHouse monitor initialized successfully")
                     # Регистрируем в глобальном collector (уже внутри Lock)
-                    collector.ch_monitor = self.ch_monitor
+                    collector.clickhouse_monitor = self.ch_monitor
                 else:
                     self.log("[TC-LOAD-003][Heavy] ClickHouse connection failed, monitoring disabled", logging.WARNING)
                     self.ch_monitor = None
@@ -499,8 +304,9 @@ class TC_LOAD_003_Heavy(Api):
         Регистрирует неудачное выполнение сценария в метриках
         Используется для всех early returns чтобы правильно считать success rate
         """
-        get_metrics_collector_003().register_heavy_run({
+        get_metrics_collector_003().register_test_run({
             'success': False,
+            'user_type': 'heavy',
             'username': self.username,
             'error': reason,
         })
@@ -748,8 +554,9 @@ class TC_LOAD_003_Heavy(Api):
             )
 
             # ========== Регистрируем метрики в глобальном collector ==========
-            get_metrics_collector_003().register_heavy_run({
+            get_metrics_collector_003().register_test_run({
                 'success': True,
+                'user_type': 'heavy',
                 'username': self.username,
                 'flow_id': self.flow_id,
                 'pm_flow_id': self.pm_flow_id,
@@ -770,8 +577,9 @@ class TC_LOAD_003_Heavy(Api):
             self.log(f"[TC-LOAD-003][Heavy][{self.username}] Unexpected error in ETL scenario: {str(e)}", logging.ERROR)
 
             # Регистрируем failed run
-            get_metrics_collector_003().register_heavy_run({
+            get_metrics_collector_003().register_test_run({
                 'success': False,
+                'user_type': 'heavy',
                 'username': self.username,
                 'error': str(e),
             })
@@ -875,11 +683,12 @@ class TC_LOAD_003_Light(Api):
     def on_stop(self):
         """
         Завершение работы Light user
-        Регистрируем финальные метрики
+        Регистрируем финальные метрики (агрегированные за весь тест)
         """
 
         if self.dashboard_opens > 0:
-            get_metrics_collector_003().register_light_run({
+            get_metrics_collector_003().register_test_run({
+                'user_type': 'light',
                 'username': self.username,
                 'dashboard_opens': self.dashboard_opens,
                 'filter_applies': self.filter_applies,
@@ -1068,7 +877,7 @@ def on_test_start_003(environment, **kwargs):
 def on_test_stop_003(environment, **kwargs):
     """
     Вызывается при завершении TC-LOAD-003
-    Генерирует и выводит финальный отчёт
+    Генерирует unified отчёт используя ReportGenerator
     """
 
     # Проверяем что TC-LOAD-003 запущен
@@ -1082,9 +891,9 @@ def on_test_stop_003(environment, **kwargs):
     collector = get_metrics_collector_003()
 
     # Останавливаем ClickHouse мониторинг
-    if collector.ch_monitor:
-        collector.ch_monitor.stop_monitoring()
-        collector.ch_monitor.collect_final()
+    if collector.clickhouse_monitor:
+        collector.clickhouse_monitor.stop_monitoring()
+        collector.clickhouse_monitor.collect_final()
 
     # Собираем Locust stats
     stats = environment.stats
@@ -1099,16 +908,33 @@ def on_test_stop_003(environment, **kwargs):
     }
     collector.locust_metrics = locust_metrics
 
-    # Генерируем summary
-    summary = collector.generate_summary()
-    print(summary)
+    # ============================================================================
+    # 🆕 ГЕНЕРАЦИЯ ENHANCED ОТЧЕТОВ
+    # ============================================================================
+    # Используем новую систему отчетности с:
+    # - Автоматическими percentiles (P50, P75, P90, P95, P99)
+    # - SLO compliance tracking (только для Heavy users)
+    # - Baseline comparison (только для Heavy users)
+    # - Separate sections для Heavy и Light users
+    # - Multiple formats: Text, JSON, CSV
+    # ============================================================================
 
-    # Сохраняем в файл
+    # Генерируем отчеты с помощью ReportGenerator
+    generator = ReportGenerator(collector)
+
+    # Выводим текстовый отчет в консоль
+    text_report = generator.generate_text_report()
+    print("\n" + text_report)
+
+    # Сохраняем все форматы отчетов (Text, JSON, CSV)
     try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = f"./logs/tc_load_003_report_{timestamp}.txt"
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(summary)
-        print(f"\n[TC-LOAD-003] Report saved to: {report_path}\n")
+        saved_files = generator.save_reports(output_dir="./logs")
+        print(f"\n[TC-LOAD-003] ✓ Successfully saved {len(saved_files)} report files:")
+        for filepath in saved_files:
+            print(f"  - {filepath}")
     except Exception as e:
-        print(f"\n[TC-LOAD-003] Failed to save report: {e}\n")
+        print(f"\n[TC-LOAD-003] ✗ Failed to save reports: {e}")
+
+    print("\n" + "=" * 80)
+    print("[TC-LOAD-003] Peak Concurrent Load Test completed")
+    print("=" * 80 + "\n")
