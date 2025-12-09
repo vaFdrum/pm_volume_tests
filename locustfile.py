@@ -16,13 +16,16 @@ from scenarios.load_test import LoadFlow
 from scenarios.process_metrics import ProcessMetricsCalculator
 from scenarios.tc_load_001_baseline import TC_LOAD_001_Baseline
 from scenarios.tc_load_002_concurrent import TC_LOAD_002_Concurrent
+from scenarios.tc_load_003_peak import TC_LOAD_003_Heavy, TC_LOAD_003_Light
 
 # Регистрируем все доступные задачи
 register_tasks({
     'load_test': LoadFlow,
     'process_metrics': ProcessMetricsCalculator,
-    'tc_load_001':TC_LOAD_001_Baseline,
-    'tc_load_002':TC_LOAD_002_Concurrent
+    'tc_load_001': TC_LOAD_001_Baseline,
+    'tc_load_002': TC_LOAD_002_Concurrent,
+    'tc_load_003_heavy': TC_LOAD_003_Heavy,
+    'tc_load_003_light': TC_LOAD_003_Light
 })
 
 _tasks = load_multiple_tasks_config()
@@ -96,9 +99,18 @@ def on_test_start_universal(environment, **kwargs):
 
         print("=" * 80 + "\n")
 
-    # Добавляй новые тесты здесь:
-    # elif TC_LOAD_003_XXX in SupersetUser.tasks:
-    #     print("TC-LOAD-003 banner...")
+    elif TC_LOAD_003_Heavy in SupersetUser.tasks or TC_LOAD_003_Light in SupersetUser.tasks:
+        print("\n" + "=" * 80)
+        print("TC-LOAD-003: PEAK CONCURRENT LOAD TEST STARTED")
+        print("=" * 80)
+        print(f"Configuration:")
+        print(f"  - Test Type: Peak Concurrent")
+        print(f"  - Heavy Users: 5 (ETL Pipeline)")
+        print(f"  - Light Users: 3 (Superset UI)")
+        print(f"  - CSV File: {CONFIG.get('csv_file_path', 'N/A')}")
+        print(
+            f"  - ClickHouse Monitoring: {'Enabled' if CONFIG.get('clickhouse', {}).get('enabled', False) else 'Disabled'}")
+        print("=" * 80 + "\n")
 
     else:
         # Fallback для неизвестных тестов
