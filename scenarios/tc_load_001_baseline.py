@@ -167,7 +167,7 @@ class TC_LOAD_001_Baseline(Api):
         ch_config = CONFIG.get("clickhouse", {})
 
         if not ch_config.get("enabled", False):
-            self.log("[TC-LOAD-001] ClickHouse monitoring disabled")
+            self._log_msg("ClickHouse monitoring disabled")
             return
 
         try:
@@ -180,15 +180,15 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if self.ch_monitor.check_connection():
-                self.log("[TC-LOAD-001] ClickHouse monitor initialized successfully")
+                self._log_msg("ClickHouse monitor initialized successfully")
                 # Регистрируем в глобальном collector
                 get_metrics_collector().set_clickhouse_monitor(self.ch_monitor)
             else:
-                self.log("[TC-LOAD-001] ClickHouse connection failed, monitoring disabled", logging.WARNING)
+                self._log_msg("ClickHouse connection failed, monitoring disabled", logging.WARNING)
                 self.ch_monitor = None
 
         except Exception as e:
-            self.log(f"[TC-LOAD-001] Failed to initialize ClickHouse monitor: {e}", logging.ERROR)
+            self._log_msg(f"Failed to initialize ClickHouse monitor: {e}", logging.ERROR)
             self.ch_monitor = None
 
     def _format_file_size(self) -> str:
@@ -204,6 +204,10 @@ class TC_LOAD_001_Baseline(Api):
             pass
         return "N/A"
 
+    def _log_msg(self, message: str, level=logging.INFO):
+        """Helper для упрощения логирования с автоматическим префиксом [TC-LOAD-001]"""
+        self.log(f"[TC-LOAD-001] {message}", level)
+
     def establish_session(self):
         """Establish user session with authentication"""
         success = establish_session(
@@ -217,9 +221,9 @@ class TC_LOAD_001_Baseline(Api):
         if success:
             self.logged_in = True
             self.session_valid = True
-            self.log(f"[TC-LOAD-001] Authentication successful for {self.username}")
+            self._log_msg(f"Authentication successful for {self.username}")
         else:
-            self.log("[TC-LOAD-001] Authentication failed", logging.ERROR)
+            self._log_msg("Authentication failed", logging.ERROR)
             self.interrupt()
 
     def on_start(self):
@@ -235,7 +239,7 @@ class TC_LOAD_001_Baseline(Api):
         self.client.verify = False
 
         self.establish_session()
-        self.log("[TC-LOAD-001] Baseline test started")
+        self._log_msg("Baseline test started")
 
         # Устанавливаем время старта в глобальном collector
         get_metrics_collector().set_test_times(time.time(), time.time())
@@ -252,7 +256,7 @@ class TC_LOAD_001_Baseline(Api):
             self.ch_monitor.stop_monitoring()
             self.ch_monitor.collect_final()
 
-        self.log("[TC-LOAD-001] Baseline test stopped")
+        self._log_msg("Baseline test stopped")
 
     @task
     def run_baseline_scenario(self):
@@ -267,16 +271,16 @@ class TC_LOAD_001_Baseline(Api):
         if not self.logged_in:
             self.establish_session()
             if not self.logged_in:
-                self.log("[TC-LOAD-001] Failed to establish session", logging.ERROR)
+                self._log_msg("Failed to establish session", logging.ERROR)
                 return
 
-        self.log("[TC-LOAD-001] Starting baseline scenario")
+        self._log_msg("Starting baseline scenario")
         self.test_start_time = time.time()
         scenario_start = time.time()
 
         try:
             # ========== PHASE 1: CSV Upload & File Import Flow ==========
-            self.log("[TC-LOAD-001][PHASE 1] CSV Upload & File Import")
+            self._log_msg("[PHASE 1] CSV Upload & File Import")
             phase1_start = time.time()
 
             # 1. Создание flow для загрузки файла
@@ -284,15 +288,15 @@ class TC_LOAD_001_Baseline(Api):
             self.flow_id = flow_id
 
             if not flow_id:
-                self.log("[TC-LOAD-001] Failed to create flow", logging.ERROR)
+                self._log_msg("Failed to create flow", logging.ERROR)
                 return
 
-            self.log(f"[TC-LOAD-001] File flow created: {flow_name} (ID: {flow_id})")
+            self._log_msg(f"File flow created: {flow_name} (ID: {flow_id})")
 
             # 2. Получение параметров DAG
             target_connection, target_schema = self._get_dag_import_params(flow_id)
             if not target_connection or not target_schema:
-                self.log("[TC-LOAD-001] Missing DAG parameters", logging.ERROR)
+                self._log_msg("Missing DAG parameters", logging.ERROR)
                 return
 
             # 3. Обновление flow перед загрузкой
@@ -305,17 +309,17 @@ class TC_LOAD_001_Baseline(Api):
                 count_chunks_val=self.total_chunks,
             )
             if not update_resp or not update_resp.ok:
-                self.log("[TC-LOAD-001] Failed to update flow before upload", logging.ERROR)
+                self._log_msg("Failed to update flow before upload", logging.ERROR)
                 return
 
             # 4. Получение ID базы данных пользователя
             db_id = self._get_user_database_id()
             if not db_id:
-                self.log("[TC-LOAD-001] User database not found", logging.ERROR)
+                self._log_msg("User database not found", logging.ERROR)
                 return
 
             if self.total_chunks == 0:
-                self.log("[TC-LOAD-001] No chunks to upload", logging.WARNING)
+                self._log_msg("No chunks to upload", logging.WARNING)
                 return
 
             timeout = (
@@ -333,14 +337,14 @@ class TC_LOAD_001_Baseline(Api):
             uploaded_chunks = self._upload_chunks(flow_id, db_id, target_schema, self.total_chunks)
             csv_upload_duration = time.time() - csv_upload_start
             self.csv_upload_duration = csv_upload_duration
-            self.log(f"[TC-LOAD-001] CSV upload completed: {uploaded_chunks}/{self.total_chunks} chunks in {csv_upload_duration:.2f}s")
+            self._log_msg(f"CSV upload completed: {uploaded_chunks}/{self.total_chunks} chunks in {csv_upload_duration:.2f}s")
 
             # 7. Финализация загрузки
             if not self._finalize_file_upload(flow_id, uploaded_chunks, timeout):
                 return
 
             # ========== DAG #1: File Processing (ClickHouse Import) ==========
-            self.log("[TC-LOAD-001][PHASE 2] DAG #1: ClickHouse Import")
+            self._log_msg("[PHASE 2] DAG #1: ClickHouse Import")
             dag1_start = time.time()
 
             # 8. Начало обработки файла
@@ -358,23 +362,23 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not success:
-                self.log("[TC-LOAD-001] DAG #1 processing failed", logging.ERROR)
+                self._log_msg("DAG #1 processing failed", logging.ERROR)
                 return
 
             dag1_duration = time.time() - dag1_start
             self.dag1_duration = dag1_duration
             phase1_duration = time.time() - phase1_start
-            self.log(f"[TC-LOAD-001] DAG #1 completed in {dag1_duration:.2f}s")
-            self.log(f"[TC-LOAD-001][PHASE 1] Completed in {phase1_duration:.2f}s")
+            self._log_msg(f"DAG #1 completed in {dag1_duration:.2f}s")
+            self._log_msg(f"[PHASE 1] Completed in {phase1_duration:.2f}s")
 
             # ========== PHASE 2: Process Mining Flow ==========
-            self.log("[TC-LOAD-001][PHASE 3] DAG #2: Process Mining Dashboard")
+            self._log_msg("[PHASE 3] DAG #2: Process Mining Dashboard")
             phase2_start = time.time()
 
             # 10. Получаем параметры для PM блока
             source_connection, source_schema = self._get_dag_pm_params(flow_id)
             if not all([source_connection, source_schema]):
-                self.log("[TC-LOAD-001] Missing PM DAG parameters", logging.ERROR)
+                self._log_msg("Missing PM DAG parameters", logging.ERROR)
                 return
 
             # 11. Создаем PM flow
@@ -388,11 +392,11 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not pm_flow_id:
-                self.log("[TC-LOAD-001] Failed to create Process Mining flow", logging.ERROR)
+                self._log_msg("Failed to create Process Mining flow", logging.ERROR)
                 return
 
             self.pm_flow_id = pm_flow_id
-            self.log(f"[TC-LOAD-001] PM Flow created: {pm_flow_name} (ID: {pm_flow_id})")
+            self._log_msg(f"PM Flow created: {pm_flow_name} (ID: {pm_flow_id})")
 
             # 12. Запускаем Process Mining flow (DAG #2)
             dag2_start = time.time()
@@ -401,7 +405,7 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not pm_run_id:
-                self.log("[TC-LOAD-001] Failed to start Process Mining flow", logging.ERROR)
+                self._log_msg("Failed to start Process Mining flow", logging.ERROR)
                 return
 
             # 13. Мониторинг статуса Process Mining
@@ -411,15 +415,15 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not (isinstance(pm_result, dict) and pm_result.get("success")):
-                self.log("[TC-LOAD-001] DAG #2 processing failed", logging.ERROR)
+                self._log_msg("DAG #2 processing failed", logging.ERROR)
                 return
 
             dag2_duration = time.time() - dag2_start
             self.dag2_duration = dag2_duration
-            self.log(f"[TC-LOAD-001] DAG #2 completed in {dag2_duration:.2f}s")
+            self._log_msg(f"DAG #2 completed in {dag2_duration:.2f}s")
 
             # ========== PHASE 3: Dashboard Interaction ==========
-            self.log("[TC-LOAD-001][PHASE 4] Dashboard Interaction")
+            self._log_msg("[PHASE 4] Dashboard Interaction")
 
             # 14. Получаем block_run_ids и открываем дашборд
             block_run_ids = pm_result.get("block_run_ids", {})
@@ -443,22 +447,22 @@ class TC_LOAD_001_Baseline(Api):
                     self.dashboard_duration = dashboard_duration
 
                     if dashboard_loaded:
-                        self.log(f"[TC-LOAD-001] Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
+                        self._log_msg(f"Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
                     else:
-                        self.log("[TC-LOAD-001] Failed to load dashboard", logging.WARNING)
+                        self._log_msg("Failed to load dashboard", logging.WARNING)
                 else:
-                    self.log("[TC-LOAD-001] Could not retrieve dashboard URL", logging.WARNING)
+                    self._log_msg("Could not retrieve dashboard URL", logging.WARNING)
             else:
-                self.log(f"[TC-LOAD-001] block_run_id not found for {target_block_id}", logging.WARNING)
+                self._log_msg(f"block_run_id not found for {target_block_id}", logging.WARNING)
 
             phase2_duration = time.time() - phase2_start
-            self.log(f"[TC-LOAD-001][PHASE 3] Completed in {phase2_duration:.2f}s")
+            self._log_msg(f"[PHASE 3] Completed in {phase2_duration:.2f}s")
 
             # ========== Scenario Complete ==========
             total_duration = time.time() - scenario_start
             self.total_duration = total_duration
-            self.log(
-                f"[TC-LOAD-001] Baseline scenario completed successfully in {total_duration:.2f}s "
+            self._log_msg(
+                f"Baseline scenario completed successfully in {total_duration:.2f}s "
                 f"(CSV: {self.csv_upload_duration:.2f}s, DAG#1: {self.dag1_duration:.2f}s, DAG#2: {self.dag2_duration:.2f}s)"
             )
 
@@ -482,7 +486,7 @@ class TC_LOAD_001_Baseline(Api):
             get_metrics_collector().set_test_times(self.test_start_time, time.time())
 
         except Exception as e:
-            self.log(f"[TC-LOAD-001] Unexpected error in baseline scenario: {str(e)}", logging.ERROR)
+            self._log_msg(f"Unexpected error in baseline scenario: {str(e)}", logging.ERROR)
 
             # Регистрируем failed run
             get_metrics_collector().register_test_run({

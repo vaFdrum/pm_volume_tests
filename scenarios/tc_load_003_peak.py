@@ -281,6 +281,10 @@ class TC_LOAD_003_Heavy(Api):
             pass
         return "N/A"
 
+    def _log_msg(self, message: str, level=logging.INFO):
+        """Helper для упрощения логирования с автоматическим префиксом [TC-LOAD-003][Heavy][username]"""
+        self.log(f"[TC-LOAD-003][Heavy][{self.username}] {message}", level)
+
     def establish_session(self):
         """Establish user session with authentication"""
         success = establish_session(
@@ -310,7 +314,7 @@ class TC_LOAD_003_Heavy(Api):
             'username': self.username,
             'error': reason,
         })
-        self.log(f"[TC-LOAD-003][Heavy][{self.username}] Scenario failed: {reason}", logging.ERROR)
+        self._log_msg(f"Scenario failed: {reason}", logging.ERROR)
 
     def on_start(self):
         """Инициализация Heavy user"""
@@ -354,13 +358,13 @@ class TC_LOAD_003_Heavy(Api):
                 self._register_failure("authentication_failed")
                 return
 
-        self.log(f"[TC-LOAD-003][Heavy][{self.username}] Starting ETL scenario")
+        self._log_msg(f"Starting ETL scenario")
         self.test_start_time = time.time()
         scenario_start = time.time()
 
         try:
             # ========== PHASE 1: CSV Upload & File Import Flow ==========
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}][PHASE 1] CSV Upload & File Import")
+            self._log_msg("[PHASE 1] CSV Upload & File Import")
             phase1_start = time.time()
 
             # 1. Создание flow для загрузки файла
@@ -371,7 +375,7 @@ class TC_LOAD_003_Heavy(Api):
                 self._register_failure("flow_creation_failed")
                 return
 
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}] File flow created: {flow_name} (ID: {flow_id})")
+            self._log_msg(f"File flow created: {flow_name} (ID: {flow_id})")
 
             # 2. Получение параметров DAG
             target_connection, target_schema = self._get_dag_import_params(flow_id)
@@ -418,7 +422,7 @@ class TC_LOAD_003_Heavy(Api):
             uploaded_chunks = self._upload_chunks(flow_id, db_id, target_schema, self.total_chunks)
             csv_upload_duration = time.time() - csv_upload_start
             self.csv_upload_duration = csv_upload_duration
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}] CSV upload completed: {uploaded_chunks}/{self.total_chunks} chunks in {csv_upload_duration:.2f}s")
+            self._log_msg(f"CSV upload completed: {uploaded_chunks}/{self.total_chunks} chunks in {csv_upload_duration:.2f}s")
 
             # 7. Финализация загрузки
             if not self._finalize_file_upload(flow_id, uploaded_chunks, timeout):
@@ -426,7 +430,7 @@ class TC_LOAD_003_Heavy(Api):
                 return
 
             # ========== DAG #1: File Processing (ClickHouse Import) ==========
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}][PHASE 2] DAG #1: ClickHouse Import")
+            self._log_msg("[PHASE 2] DAG #1: ClickHouse Import")
             dag1_start = time.time()
 
             # 8. Начало обработки файла
@@ -451,11 +455,11 @@ class TC_LOAD_003_Heavy(Api):
             dag1_duration = time.time() - dag1_start
             self.dag1_duration = dag1_duration
             phase1_duration = time.time() - phase1_start
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}] DAG #1 completed in {dag1_duration:.2f}s")
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}][PHASE 1] Completed in {phase1_duration:.2f}s")
+            self._log_msg(f"DAG #1 completed in {dag1_duration:.2f}s")
+            self._log_msg(f"[PHASE 1] Completed in {phase1_duration:.2f}s")
 
             # ========== PHASE 2: Process Mining Flow ==========
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}][PHASE 3] DAG #2: Process Mining Dashboard")
+            self._log_msg("[PHASE 3] DAG #2: Process Mining Dashboard")
             phase2_start = time.time()
 
             # 10. Получаем параметры для PM блока
@@ -479,7 +483,7 @@ class TC_LOAD_003_Heavy(Api):
                 return
 
             self.pm_flow_id = pm_flow_id
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}] PM Flow created: {pm_flow_name} (ID: {pm_flow_id})")
+            self._log_msg(f"PM Flow created: {pm_flow_name} (ID: {pm_flow_id})")
 
             # 12. Запускаем Process Mining flow (DAG #2)
             dag2_start = time.time()
@@ -503,10 +507,10 @@ class TC_LOAD_003_Heavy(Api):
 
             dag2_duration = time.time() - dag2_start
             self.dag2_duration = dag2_duration
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}] DAG #2 completed in {dag2_duration:.2f}s")
+            self._log_msg(f"DAG #2 completed in {dag2_duration:.2f}s")
 
             # ========== PHASE 3: Dashboard Interaction ==========
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}][PHASE 4] Dashboard Interaction")
+            self._log_msg("[PHASE 4] Dashboard Interaction")
 
             # 14. Получаем block_run_ids и открываем дашборд
             block_run_ids = pm_result.get("block_run_ids", {})
@@ -530,26 +534,26 @@ class TC_LOAD_003_Heavy(Api):
                     self.dashboard_duration = dashboard_duration
 
                     if dashboard_loaded:
-                        self.log(f"[TC-LOAD-003][Heavy][{self.username}] Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
+                        self._log_msg(f"Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
 
                         # ✅ КЛЮЧЕВОЙ МОМЕНТ: Регистрируем дашборд для Light users!
                         get_dashboard_pool_003().add(dashboard_url, self.username)
-                        self.log(f"[TC-LOAD-003][Heavy][{self.username}] Dashboard registered for Light users (total: {get_dashboard_pool_003().count()})")
+                        self._log_msg(f"Dashboard registered for Light users (total: {get_dashboard_pool_003().count()})")
                     else:
-                        self.log(f"[TC-LOAD-003][Heavy][{self.username}] Failed to load dashboard", logging.WARNING)
+                        self._log_msg(f"Failed to load dashboard", logging.WARNING)
                 else:
-                    self.log(f"[TC-LOAD-003][Heavy][{self.username}] Could not retrieve dashboard URL", logging.WARNING)
+                    self._log_msg(f"Could not retrieve dashboard URL", logging.WARNING)
             else:
-                self.log(f"[TC-LOAD-003][Heavy][{self.username}] block_run_id not found for {target_block_id}", logging.WARNING)
+                self._log_msg(f"block_run_id not found for {target_block_id}", logging.WARNING)
 
             phase2_duration = time.time() - phase2_start
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}][PHASE 3] Completed in {phase2_duration:.2f}s")
+            self._log_msg(f"[PHASE 3] Completed in {phase2_duration:.2f}s")
 
             # ========== Scenario Complete ==========
             total_duration = time.time() - scenario_start
             self.total_duration = total_duration
-            self.log(
-                f"[TC-LOAD-003][Heavy][{self.username}] ETL completed successfully in {total_duration:.2f}s "
+            self._log_msg(
+                f"ETL completed successfully in {total_duration:.2f}s "
                 f"(CSV: {self.csv_upload_duration:.2f}s, DAG#1: {self.dag1_duration:.2f}s, DAG#2: {self.dag2_duration:.2f}s)"
             )
 
@@ -574,7 +578,7 @@ class TC_LOAD_003_Heavy(Api):
             get_metrics_collector_003().set_test_times(self.test_start_time, time.time())
 
         except Exception as e:
-            self.log(f"[TC-LOAD-003][Heavy][{self.username}] Unexpected error in ETL scenario: {str(e)}", logging.ERROR)
+            self._log_msg(f"Unexpected error in ETL scenario: {str(e)}", logging.ERROR)
 
             # Регистрируем failed run
             get_metrics_collector_003().register_test_run({
@@ -632,6 +636,10 @@ class TC_LOAD_003_Light(Api):
         self.filter_times = []
         self.export_times = []
 
+    def _log_msg(self, message: str, level=logging.INFO):
+        """Helper для упрощения логирования с автоматическим префиксом [TC-LOAD-003][Light][username]"""
+        self.log(f"[TC-LOAD-003][Light][{self.username}] {message}", level)
+
     def establish_session(self):
         """Establish user session with authentication"""
         success = establish_session(
@@ -666,19 +674,19 @@ class TC_LOAD_003_Light(Api):
         self.establish_session()
 
         if not self.logged_in:
-            self.log(f"[TC-LOAD-003][Light][{self.username}] Failed to authenticate", logging.ERROR)
+            self._log_msg(f"Failed to authenticate", logging.ERROR)
             self.interrupt()
             return
 
         # 2. Ждём дашборды
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Waiting for dashboards from Heavy users...")
+        self._log_msg(f"Waiting for dashboards from Heavy users...")
 
         if not get_dashboard_pool_003().wait_until_available(timeout=600):
-            self.log(f"[TC-LOAD-003][Light][{self.username}] Timeout: No dashboards available after 10 min", logging.WARNING)
+            self._log_msg(f"Timeout: No dashboards available after 10 min", logging.WARNING)
             self.interrupt()
             return
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Dashboards available ({get_dashboard_pool_003().count()})! Starting UI operations")
+        self._log_msg(f"Dashboards available ({get_dashboard_pool_003().count()})! Starting UI operations")
 
     def on_stop(self):
         """
@@ -698,7 +706,7 @@ class TC_LOAD_003_Light(Api):
                 'export_times': self.export_times,
             })
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Stopped. Operations: "
+        self._log_msg(f"Stopped. Operations: "
                  f"{self.dashboard_opens} opens, {self.filter_applies} filters, {self.exports} exports")
 
     @task(weight=5)
@@ -719,10 +727,10 @@ class TC_LOAD_003_Light(Api):
         dashboard_url = get_dashboard_pool_003().get_random()
 
         if not dashboard_url:
-            self.log(f"[TC-LOAD-003][Light][{self.username}] No dashboards in pool", logging.WARNING)
+            self._log_msg(f"No dashboards in pool", logging.WARNING)
             return
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Opening dashboard: {dashboard_url}")
+        self._log_msg(f"Opening dashboard: {dashboard_url}")
 
         start_time = time.time()
 
@@ -752,7 +760,7 @@ class TC_LOAD_003_Light(Api):
         self.dashboard_load_times.append(load_time)
         self.dashboard_opens += 1
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Dashboard loaded in {load_time:.2f}s")
+        self._log_msg(f"Dashboard loaded in {load_time:.2f}s")
 
     @task(weight=3)
     def apply_filters_and_refresh(self):
@@ -774,7 +782,7 @@ class TC_LOAD_003_Light(Api):
         if not dashboard_url:
             return
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Applying filters to dashboard")
+        self._log_msg(f"Applying filters to dashboard")
 
         start_time = time.time()
 
@@ -798,7 +806,7 @@ class TC_LOAD_003_Light(Api):
         self.filter_times.append(filter_time)
         self.filter_applies += 1
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Filters applied in {filter_time:.2f}s")
+        self._log_msg(f"Filters applied in {filter_time:.2f}s")
 
     @task(weight=2)
     def export_dashboard_data(self):
@@ -820,7 +828,7 @@ class TC_LOAD_003_Light(Api):
         if not dashboard_url:
             return
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Exporting data from dashboard")
+        self._log_msg(f"Exporting data from dashboard")
 
         start_time = time.time()
 
@@ -838,7 +846,7 @@ class TC_LOAD_003_Light(Api):
         self.export_times.append(export_time)
         self.exports += 1
 
-        self.log(f"[TC-LOAD-003][Light][{self.username}] Export completed in {export_time:.2f}s")
+        self._log_msg(f"Export completed in {export_time:.2f}s")
 
 
 # ============================================================================
