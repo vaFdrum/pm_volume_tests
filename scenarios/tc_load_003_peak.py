@@ -358,7 +358,7 @@ class TC_LOAD_003_Heavy(Api):
                 self._register_failure("authentication_failed")
                 return
 
-        self._log_msg(f"Starting ETL scenario")
+        self._log_msg("Starting ETL scenario")
         self.test_start_time = time.time()
         scenario_start = time.time()
 
@@ -540,9 +540,9 @@ class TC_LOAD_003_Heavy(Api):
                         get_dashboard_pool_003().add(dashboard_url, self.username)
                         self._log_msg(f"Dashboard registered for Light users (total: {get_dashboard_pool_003().count()})")
                     else:
-                        self._log_msg(f"Failed to load dashboard", logging.WARNING)
+                        self._log_msg("Failed to load dashboard", logging.WARNING)
                 else:
-                    self._log_msg(f"Could not retrieve dashboard URL", logging.WARNING)
+                    self._log_msg("Could not retrieve dashboard URL", logging.WARNING)
             else:
                 self._log_msg(f"block_run_id not found for {target_block_id}", logging.WARNING)
 
@@ -674,12 +674,12 @@ class TC_LOAD_003_Light(Api):
         self.establish_session()
 
         if not self.logged_in:
-            self._log_msg(f"Failed to authenticate", logging.ERROR)
+            self._log_msg("Failed to authenticate", logging.ERROR)
             self.interrupt()
             return
 
         # 2. Ждём дашборды
-        self._log_msg(f"Waiting for dashboards from Heavy users...")
+        self._log_msg("Waiting for dashboards from Heavy users...")
 
         if not get_dashboard_pool_003().wait_until_available(timeout=600):
             self._log_msg(f"Timeout: No dashboards available after 10 min", logging.WARNING)
@@ -727,7 +727,7 @@ class TC_LOAD_003_Light(Api):
         dashboard_url = get_dashboard_pool_003().get_random()
 
         if not dashboard_url:
-            self._log_msg(f"No dashboards in pool", logging.WARNING)
+            self._log_msg("No dashboards in pool", logging.WARNING)
             return
 
         self._log_msg(f"Opening dashboard: {dashboard_url}")
@@ -782,7 +782,7 @@ class TC_LOAD_003_Light(Api):
         if not dashboard_url:
             return
 
-        self._log_msg(f"Applying filters to dashboard")
+        self._log_msg("Applying filters to dashboard")
 
         start_time = time.time()
 
@@ -828,7 +828,7 @@ class TC_LOAD_003_Light(Api):
         if not dashboard_url:
             return
 
-        self._log_msg(f"Exporting data from dashboard")
+        self._log_msg("Exporting data from dashboard")
 
         start_time = time.time()
 

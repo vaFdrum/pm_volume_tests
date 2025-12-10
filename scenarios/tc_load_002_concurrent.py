@@ -261,13 +261,13 @@ class TC_LOAD_002_Concurrent(Api):
                 self.log("[TC-LOAD-002] Failed to establish session", logging.ERROR)
                 return
 
-        self._log_msg(f"Starting concurrent scenario")
+        self._log_msg("Starting concurrent scenario")
         self.test_start_time = time.time()
         scenario_start = time.time()
 
         try:
             # ========== PHASE 1: CSV Upload & File Import Flow ==========
-            self._log_msg(f"[PHASE 1] CSV Upload & File Import")
+            self._log_msg("[PHASE 1] CSV Upload & File Import")
             phase1_start = time.time()
 
             # 1. Создание flow для загрузки файла
@@ -275,7 +275,7 @@ class TC_LOAD_002_Concurrent(Api):
             self.flow_id = flow_id
 
             if not flow_id:
-                self._log_msg(f"Failed to create flow", logging.ERROR)
+                self._log_msg("Failed to create flow", logging.ERROR)
                 return
 
             self._log_msg(f"File flow created: {flow_name} (ID: {flow_id})")
@@ -283,7 +283,7 @@ class TC_LOAD_002_Concurrent(Api):
             # 2. Получение параметров DAG
             target_connection, target_schema = self._get_dag_import_params(flow_id)
             if not target_connection or not target_schema:
-                self._log_msg(f"Missing DAG parameters", logging.ERROR)
+                self._log_msg("Missing DAG parameters", logging.ERROR)
                 return
 
             # 3. Обновление flow перед загрузкой
@@ -296,17 +296,17 @@ class TC_LOAD_002_Concurrent(Api):
                 count_chunks_val=self.total_chunks,
             )
             if not update_resp or not update_resp.ok:
-                self._log_msg(f"Failed to update flow before upload", logging.ERROR)
+                self._log_msg("Failed to update flow before upload", logging.ERROR)
                 return
 
             # 4. Получение ID базы данных пользователя
             db_id = self._get_user_database_id()
             if not db_id:
-                self._log_msg(f"User database not found", logging.ERROR)
+                self._log_msg("User database not found", logging.ERROR)
                 return
 
             if self.total_chunks == 0:
-                self._log_msg(f"No chunks to upload", logging.WARNING)
+                self._log_msg("No chunks to upload", logging.WARNING)
                 return
 
             timeout = (
@@ -331,7 +331,7 @@ class TC_LOAD_002_Concurrent(Api):
                 return
 
             # ========== DAG #1: File Processing (ClickHouse Import) ==========
-            self._log_msg(f"[PHASE 2] DAG #1: ClickHouse Import")
+            self._log_msg("[PHASE 2] DAG #1: ClickHouse Import")
             dag1_start = time.time()
 
             # 8. Начало обработки файла
@@ -349,7 +349,7 @@ class TC_LOAD_002_Concurrent(Api):
             )
 
             if not success:
-                self._log_msg(f"DAG #1 processing failed", logging.ERROR)
+                self._log_msg("DAG #1 processing failed", logging.ERROR)
                 return
 
             dag1_duration = time.time() - dag1_start
@@ -359,13 +359,13 @@ class TC_LOAD_002_Concurrent(Api):
             self._log_msg(f"[PHASE 1] Completed in {phase1_duration:.2f}s")
 
             # ========== PHASE 2: Process Mining Flow ==========
-            self._log_msg(f"[PHASE 3] DAG #2: Process Mining Dashboard")
+            self._log_msg("[PHASE 3] DAG #2: Process Mining Dashboard")
             phase2_start = time.time()
 
             # 10. Получаем параметры для PM блока
             source_connection, source_schema = self._get_dag_pm_params(flow_id)
             if not all([source_connection, source_schema]):
-                self._log_msg(f"Missing PM DAG parameters", logging.ERROR)
+                self._log_msg("Missing PM DAG parameters", logging.ERROR)
                 return
 
             # 11. Создаем PM flow
@@ -379,7 +379,7 @@ class TC_LOAD_002_Concurrent(Api):
             )
 
             if not pm_flow_id:
-                self._log_msg(f"Failed to create Process Mining flow", logging.ERROR)
+                self._log_msg("Failed to create Process Mining flow", logging.ERROR)
                 return
 
             self.pm_flow_id = pm_flow_id
@@ -392,7 +392,7 @@ class TC_LOAD_002_Concurrent(Api):
             )
 
             if not pm_run_id:
-                self._log_msg(f"Failed to start Process Mining flow", logging.ERROR)
+                self._log_msg("Failed to start Process Mining flow", logging.ERROR)
                 return
 
             # 13. Мониторинг статуса Process Mining
@@ -402,7 +402,7 @@ class TC_LOAD_002_Concurrent(Api):
             )
 
             if not (isinstance(pm_result, dict) and pm_result.get("success")):
-                self._log_msg(f"DAG #2 processing failed", logging.ERROR)
+                self._log_msg("DAG #2 processing failed", logging.ERROR)
                 return
 
             dag2_duration = time.time() - dag2_start
@@ -410,7 +410,7 @@ class TC_LOAD_002_Concurrent(Api):
             self._log_msg(f"DAG #2 completed in {dag2_duration:.2f}s")
 
             # ========== PHASE 3: Dashboard Interaction ==========
-            self._log_msg(f"[PHASE 4] Dashboard Interaction")
+            self._log_msg("[PHASE 4] Dashboard Interaction")
 
             # 14. Получаем block_run_ids и открываем дашборд
             block_run_ids = pm_result.get("block_run_ids", {})
@@ -436,9 +436,9 @@ class TC_LOAD_002_Concurrent(Api):
                     if dashboard_loaded:
                         self._log_msg(f"Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
                     else:
-                        self._log_msg(f"Failed to load dashboard", logging.WARNING)
+                        self._log_msg("Failed to load dashboard", logging.WARNING)
                 else:
-                    self._log_msg(f"Could not retrieve dashboard URL", logging.WARNING)
+                    self._log_msg("Could not retrieve dashboard URL", logging.WARNING)
             else:
                 self._log_msg(f"block_run_id not found for {target_block_id}", logging.WARNING)
 
