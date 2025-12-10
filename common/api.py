@@ -553,7 +553,7 @@ class Api(SequentialTaskSet):
 
                     return False
 
-                elif current_status in ["running", "pending", "scheduled"]:
+                elif current_status in ["running", "pending", "scheduled", "queued"]:
                     if poll_count % 5 == 0:
                         elapsed = int(time.time() - monitoring_start)
                         status_info = f"{'PM' if is_pm_flow else 'File'} status: {current_status}"
