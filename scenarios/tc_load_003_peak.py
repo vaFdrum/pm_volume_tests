@@ -21,6 +21,7 @@ from locust import task, between, events
 
 from common.auth import establish_session
 from common.api.load_api import LoadApi
+from common.api.object_api import ChartApi
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
@@ -626,14 +627,17 @@ class TC_LOAD_003_Light(LoadApi):
         self.username = None
         self.password = None
 
+        # ChartApi для создания чартов
+        self.chart_api: Optional[ChartApi] = None
+
         # Счётчики для метрик
         self.dashboard_opens = 0
-        self.filter_applies = 0
+        self.chart_creates = 0
         self.exports = 0
 
         # Время операций
         self.dashboard_load_times = []
-        self.filter_times = []
+        self.chart_create_times = []
         self.export_times = []
 
     def _log_msg(self, message: str, level=logging.INFO):
@@ -678,7 +682,10 @@ class TC_LOAD_003_Light(LoadApi):
             self.interrupt()
             return
 
-        # 2. Ждём дашборды
+        # 2. Инициализируем ChartApi
+        self.chart_api = ChartApi(self.client, self.log)
+
+        # 3. Ждём дашборды
         self._log_msg("Waiting for dashboards from Heavy users...")
 
         if not get_dashboard_pool_003().wait_until_available(timeout=600):
@@ -694,20 +701,20 @@ class TC_LOAD_003_Light(LoadApi):
         Регистрируем финальные метрики (агрегированные за весь тест)
         """
 
-        if self.dashboard_opens > 0:
+        if self.dashboard_opens > 0 or self.chart_creates > 0:
             get_metrics_collector_003().register_test_run({
                 'user_type': 'light',
                 'username': self.username,
                 'dashboard_opens': self.dashboard_opens,
-                'filter_applies': self.filter_applies,
+                'chart_creates': self.chart_creates,
                 'exports': self.exports,
                 'dashboard_load_times': self.dashboard_load_times,
-                'filter_times': self.filter_times,
+                'chart_create_times': self.chart_create_times,
                 'export_times': self.export_times,
             })
 
         self._log_msg(f"Stopped. Operations: "
-                 f"{self.dashboard_opens} opens, {self.filter_applies} filters, {self.exports} exports")
+                 f"{self.dashboard_opens} opens, {self.chart_creates} charts, {self.exports} exports")
 
     @task(weight=5)
     def open_and_explore_dashboard(self):
@@ -742,50 +749,50 @@ class TC_LOAD_003_Light(LoadApi):
             self._log_msg(f"Failed to load dashboard: {dashboard_url}", logging.WARNING)
 
     @task(weight=3)
-    def apply_filters_and_refresh(self):
+    def create_chart(self):
         """
-        ЗАДАЧА 2: Применить фильтры к дашборду
+        ЗАДАЧА 2: Создать чарт на дашборде
 
         Симулирует аналитика, который:
         - Выбирает дашборд
-        - Применяет фильтры (даты, категории, etc.)
-        - Ждёт пересчёта данных
+        - Получает datasource_id из информации о дашборде
+        - Создаёт новый чарт (table, histogramChart или supersetGraph)
 
         Weight=3: средняя частота
-
-        TODO: Заменить заглушку на реальный POST запрос с фильтрами
         """
 
         dashboard_url = get_dashboard_pool_003().get_random()
 
         if not dashboard_url:
+            self._log_msg("No dashboards in pool for chart creation", logging.WARNING)
             return
 
-        self._log_msg("Applying filters to dashboard")
+        if not self.chart_api:
+            self._log_msg("ChartApi not initialized", logging.ERROR)
+            return
 
         start_time = time.time()
 
-        # === ЗАГЛУШКА: Здесь будет POST запрос с фильтрами ===
-        # TODO: Раскомментировать когда будут готовы endpoints
-        # filter_payload = {
-        #     "date_range": "last_7_days",
-        #     "category": "example"
-        # }
-        #
-        # response = self.client.post(
-        #     f"{dashboard_url}/api/filter",
-        #     json=filter_payload,
-        #     name="[Light] Apply Filters",
-        #     catch_response=True
-        # )
+        # Получаем информацию о дашборде (включая datasource_id)
+        dashboard_info = self.chart_api.get_dashboard_info(dashboard_url)
 
-        # ЗАГЛУШКА: симуляция
-        time.sleep(random.uniform(0.3, 1.5))
-        filter_time = time.time() - start_time
-        self.filter_times.append(filter_time)
-        self.filter_applies += 1
+        if not dashboard_info or not dashboard_info.get('datasource_id'):
+            self._log_msg(f"Could not get datasource_id from dashboard: {dashboard_url}", logging.WARNING)
+            return
 
-        self._log_msg(f"Filters applied in {filter_time:.2f}s")
+        datasource_id = dashboard_info['datasource_id']
+        self._log_msg(f"Creating chart for datasource_id={datasource_id}")
+
+        # Создаём и сохраняем чарт (случайный тип)
+        success, chart_id = self.chart_api.create_and_save_chart(datasource_id)
+        create_time = time.time() - start_time
+
+        if success:
+            self.chart_create_times.append(create_time)
+            self.chart_creates += 1
+            self._log_msg(f"Chart created in {create_time:.2f}s (chart_id={chart_id})")
+        else:
+            self._log_msg(f"Failed to create chart for datasource_id={datasource_id}", logging.WARNING)
 
     @task(weight=2)
     def export_dashboard_data(self):

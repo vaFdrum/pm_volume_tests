@@ -34,6 +34,14 @@ class ChartApi:
     # Доступные типы чартов
     CHART_TYPES = ["table", "histogramChart", "supersetGraph"]
 
+    # Маппинг имён файлов шаблонов
+    # Формат: chart_type -> (create_file, save_file)
+    TEMPLATE_FILES = {
+        "table": ("tableCreate.json", "tableSave.json"),
+        "histogramChart": ("histogramChartCreate.json", "histogramChartSave.json"),
+        "supersetGraph": ("T1566supersetGraphCreate.json", "T1566supersetGraphSave.json"),
+    }
+
     # Базовый путь к JSON шаблонам
     PAYLOAD_BASE_PATH = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -60,10 +68,18 @@ class ChartApi:
         Returns:
             Dict с данными шаблона или None при ошибке
         """
+        if chart_type not in self.TEMPLATE_FILES:
+            self.log(f"Unknown chart type: {chart_type}", logging.ERROR)
+            return None
+
+        # Получаем имя файла из маппинга
+        create_file, save_file = self.TEMPLATE_FILES[chart_type]
+        filename = create_file if template_name == "create" else save_file
+
         file_path = os.path.join(
             self.PAYLOAD_BASE_PATH,
             chart_type,
-            f"{chart_type}_{template_name}.json"
+            filename
         )
 
         try:
@@ -286,3 +302,77 @@ class ChartApi:
         if match:
             return match.group(1)
         return None
+
+    @staticmethod
+    def extract_dashboard_id_from_url(dashboard_url: str) -> Optional[str]:
+        """
+        Извлекает dashboard_id из URL дашборда
+
+        Форматы URL:
+        - /superset/dashboard/123/
+        - /dashboard/123/
+        - /superset/dashboard/123
+
+        Args:
+            dashboard_url: URL дашборда
+
+        Returns:
+            dashboard_id как строка или None
+        """
+        # Паттерн для извлечения ID из URL
+        match = re.search(r'/dashboard/(\d+)/?', dashboard_url)
+        if match:
+            return match.group(1)
+        return None
+
+    def get_dashboard_info(self, dashboard_url: str) -> Optional[Dict]:
+        """
+        Получает информацию о дашборде через Superset API
+
+        Args:
+            dashboard_url: URL дашборда
+
+        Returns:
+            Dict с информацией о дашборде:
+            {
+                'id': int,
+                'title': str,
+                'datasource_id': str или None
+            }
+            или None при ошибке
+        """
+        dashboard_id = self.extract_dashboard_id_from_url(dashboard_url)
+        if not dashboard_id:
+            self.log(f"Could not extract dashboard_id from URL: {dashboard_url}", logging.ERROR)
+            return None
+
+        api_url = f"/api/v1/dashboard/{dashboard_id}"
+        self.log(f"Fetching dashboard info: {api_url}")
+
+        try:
+            response = self.client.get(
+                api_url,
+                name="[ChartApi] Get Dashboard Info",
+                headers={"Content-Type": "application/json"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                result = data.get("result", {})
+                title = result.get("dashboard_title", "")
+                datasource_id = self.extract_datasource_id_from_title(title)
+
+                self.log(f"Dashboard info: id={dashboard_id}, title='{title}', datasource_id={datasource_id}")
+
+                return {
+                    'id': int(dashboard_id),
+                    'title': title,
+                    'datasource_id': datasource_id
+                }
+            else:
+                self.log(f"Failed to get dashboard info: {response.status_code}", logging.ERROR)
+                return None
+
+        except Exception as e:
+            self.log(f"Error getting dashboard info: {e}", logging.ERROR)
+            return None
