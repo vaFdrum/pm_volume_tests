@@ -192,8 +192,11 @@ def get_fallback_config() -> Dict[str, Any]:
             "load_test": ["load_test"],
             "mixed": ["load_test", "process_metrics"],
             "default": ["process_metrics"],
-            "tc_load_001":["tc_load_001"],
-            "tc_load_002":["tc_load_002"]
+            "tc_load_001": ["tc_load_001"],
+            "tc_load_002": ["tc_load_002"],
+            "tc_load_003": ["tc_load_003_heavy", "tc_load_003_light"],
+            "tc_load_003_heavy": ["tc_load_003_heavy"],
+            "tc_load_003_light": ["tc_load_003_light"]
         },
         "users": [
             {
