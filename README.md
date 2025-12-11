@@ -9,7 +9,10 @@
 ```
 pm_volume-tests/
 ├── common/                      # Общие утилиты
-│   ├── api.py                  # Базовый API класс с методами ETL
+│   ├── api/                    # API модули
+│   │   ├── __init__.py         # Инициализация пакета
+│   │   ├── load_api.py         # Базовый API класс с методами ETL
+│   │   └── object_api.py       # API для работы с объектами
 │   ├── auth.py                 # Аутентификация пользователей
 │   ├── clickhouse_monitor.py   # Мониторинг ClickHouse метрик
 │   ├── csv_utils.py            # Работа с CSV файлами
@@ -333,10 +336,10 @@ curl http://localhost:9090/metrics
 
 ```python
 # В scenarios/ создайте новый файл
-from common.api import Api
+from common.api.load_api import LoadApi
 from locust import task
 
-class CustomScenario(Api):
+class CustomScenario(LoadApi):
     @task
     def custom_flow(self):
         # Ваша логика тестирования
@@ -398,7 +401,7 @@ log_level: "INFO"
 ### Добавление нового теста
 
 1. Создайте класс в `scenarios/`
-2. Наследуйтесь от `common.api.Api`
+2. Наследуйтесь от `common.api.LoadApi`
 3. Реализуйте методы `@task`
 4. Зарегистрируйте в `locustfile.py`
 5. Добавьте в конфигурацию сценариев
@@ -407,10 +410,10 @@ log_level: "INFO"
 
 ```python
 # scenarios/tc_load_003_highload.py
-from common.api import Api
+from common.api.load_api import LoadApi
 from locust import task
 
-class TC_LOAD_003_HighLoad(Api):
+class TC_LOAD_003_HighLoad(LoadApi):
     @task
     def highload_scenario(self):
         # Логика тестирования высокой нагрузки
