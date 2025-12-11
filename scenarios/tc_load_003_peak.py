@@ -720,8 +720,6 @@ class TC_LOAD_003_Light(LoadApi):
         - Измеряет время отклика
 
         Weight=5: самая частая операция
-
-        TODO: Заменить заглушку на реальный GET запрос к Superset
         """
 
         dashboard_url = get_dashboard_pool_003().get_random()
@@ -730,37 +728,18 @@ class TC_LOAD_003_Light(LoadApi):
             self._log_msg("No dashboards in pool", logging.WARNING)
             return
 
-        self._log_msg(f"Opening dashboard: {dashboard_url}")
-
         start_time = time.time()
 
-        # === ЗАГЛУШКА: Здесь будет реальный API call ===
-        # TODO: Раскомментировать когда будут готовы endpoints
-        # response = self.client.get(
-        #     dashboard_url,
-        #     name="[Light] Open Dashboard",
-        #     catch_response=True
-        # )
-        #
-        # if response.ok:
-        #     load_time = time.time() - start_time
-        #     self.dashboard_load_times.append(load_time)
-        #     self.dashboard_opens += 1
-        #
-        #     if load_time < 10:
-        #         response.success()
-        #     else:
-        #         response.failure(f"Dashboard load too slow: {load_time:.2f}s")
-        # else:
-        #     response.failure(f"Failed to load dashboard: {response.status_code}")
-
-        # ЗАГЛУШКА: симуляция загрузки
-        time.sleep(random.uniform(0.5, 2.0))
+        # Используем метод из базового класса LoadApi
+        success = self._open_dashboard(dashboard_url)
         load_time = time.time() - start_time
-        self.dashboard_load_times.append(load_time)
-        self.dashboard_opens += 1
 
-        self._log_msg(f"Dashboard loaded in {load_time:.2f}s")
+        if success:
+            self.dashboard_load_times.append(load_time)
+            self.dashboard_opens += 1
+            self._log_msg(f"Dashboard loaded in {load_time:.2f}s")
+        else:
+            self._log_msg(f"Failed to load dashboard: {dashboard_url}", logging.WARNING)
 
     @task(weight=3)
     def apply_filters_and_refresh(self):
