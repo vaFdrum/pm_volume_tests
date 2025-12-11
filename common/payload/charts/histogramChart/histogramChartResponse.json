@@ -1,0 +1,34 @@
+{
+  "result": [
+    {
+      "data": [
+        {
+          "_activityProcessDuration": 0,
+          "__activityCount": 33
+        },
+        {
+          "_activityProcessDuration": 1,
+          "__activityCount": 20
+        },
+        {
+          "_activityProcessDuration": 3,
+          "__activityCount": 6
+        },
+        {
+          "_activityProcessDuration": 4,
+          "__activityCount": 8
+        }
+      ],
+      "rowcount": 4,
+      "sql_rowcount": 4,
+      "colnames": [
+        "_activityProcessDuration",
+        "__activityCount"
+      ],
+      "coltypes": [
+        0,
+        0
+      ]
+    }
+  ]
+}
