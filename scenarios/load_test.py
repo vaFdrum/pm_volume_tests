@@ -8,7 +8,7 @@ import urllib3
 from locust import task, between
 
 from common.auth import establish_session
-from common.api import Api
+from common.API.load_api import Api
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool, stop_manager
 from common.metrics import (

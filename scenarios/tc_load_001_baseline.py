@@ -14,7 +14,7 @@ from threading import Lock
 from locust import task, between, events
 
 from common.auth import establish_session
-from common.api import Api
+from common.API.load_api import Api
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
