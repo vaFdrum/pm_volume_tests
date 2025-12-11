@@ -9,7 +9,7 @@
 ```
 pm_volume-tests/
 ├── common/                      # Общие утилиты
-│   ├── API/                    # API модули
+│   ├── api/                    # API модули
 │   │   ├── __init__.py         # Инициализация пакета
 │   │   ├── load_api.py         # Базовый API класс с методами ETL
 │   │   └── object_api.py       # API для работы с объектами
@@ -336,7 +336,7 @@ curl http://localhost:9090/metrics
 
 ```python
 # В scenarios/ создайте новый файл
-from common.API.load_api import Api
+from common.api.load_api import Api
 from locust import task
 
 class CustomScenario(Api):
@@ -410,7 +410,7 @@ log_level: "INFO"
 
 ```python
 # scenarios/tc_load_003_highload.py
-from common.API.load_api import Api
+from common.api.load_api import Api
 from locust import task
 
 class TC_LOAD_003_HighLoad(Api):

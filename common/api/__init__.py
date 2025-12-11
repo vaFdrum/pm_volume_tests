@@ -1,5 +1,5 @@
 """API module for load testing"""
 
-from common.API.load_api import Api
+from common.api.load_api import Api
 
 __all__ = ["Api"]
