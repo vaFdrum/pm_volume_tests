@@ -20,7 +20,7 @@ from threading import Lock, Event
 from locust import task, between, events
 
 from common.auth import establish_session
-from common.api.load_api import Api
+from common.api.load_api import LoadApi
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
@@ -179,7 +179,7 @@ def get_metrics_collector_003() -> MetricsCollector:
 # СЕКЦИЯ 3: HEAVY USER CLASS (ETL Operations)
 # ============================================================================
 
-class TC_LOAD_003_Heavy(Api):
+class TC_LOAD_003_Heavy(LoadApi):
     """
     Heavy ETL operations - 5 параллельных пользователей
 
@@ -593,7 +593,7 @@ class TC_LOAD_003_Heavy(Api):
 # СЕКЦИЯ 4: LIGHT USER CLASS (Superset UI Operations)
 # ============================================================================
 
-class TC_LOAD_003_Light(Api):
+class TC_LOAD_003_Light(LoadApi):
     """
     Light Superset UI operations - 3 пользователя
 

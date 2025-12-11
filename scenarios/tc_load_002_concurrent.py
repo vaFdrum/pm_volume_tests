@@ -14,7 +14,7 @@ from threading import Lock
 from locust import task, between, events
 
 from common.auth import establish_session
-from common.api.load_api import Api
+from common.api.load_api import LoadApi
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
@@ -108,7 +108,7 @@ def get_metrics_collector_002() -> MetricsCollector:
     return _metrics_collector
 
 
-class TC_LOAD_002_Concurrent(Api):
+class TC_LOAD_002_Concurrent(LoadApi):
     """
     TC-LOAD-002: Concurrent Load Test
 

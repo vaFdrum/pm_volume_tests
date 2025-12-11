@@ -25,7 +25,7 @@ from common.metrics import (
 from config import CONFIG
 
 
-class Api(SequentialTaskSet):
+class LoadApi(SequentialTaskSet):
     def __init__(self, parent):
         super().__init__(parent)
         self.username = None

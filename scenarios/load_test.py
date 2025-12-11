@@ -8,7 +8,7 @@ import urllib3
 from locust import task, between
 
 from common.auth import establish_session
-from common.api.load_api import Api
+from common.api.load_api import LoadApi
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool, stop_manager
 from common.metrics import (
@@ -24,7 +24,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 start_metrics_server(CONFIG.get("metrics_port", 9090))
 
 
-class LoadFlow(Api):
+class LoadFlow(LoadApi):
     """ETL flow load testing task set"""
 
     wait_time = between(min_wait=1, max_wait=5)
