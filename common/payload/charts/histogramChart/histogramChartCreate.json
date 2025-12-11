@@ -1,0 +1,142 @@
+{
+  "datasource": {
+    "id": 838,
+    "type": "table"
+  },
+  "force": false,
+  "queries": [
+    {
+      "filters": [
+        {
+          "col": "_caseStartTime",
+          "op": "TEMPORAL_RANGE",
+          "val": "No filter"
+        }
+      ],
+      "extras": {
+        "having": "",
+        "where": ""
+      },
+      "applied_time_extras": {},
+      "columns": [
+        {
+          "timeGrain": "P1D",
+          "columnType": "BASE_AXIS",
+          "expressionType": "SQL",
+          "label": "_activityProcessDuration",
+          "sqlExpression": "_caseId, _activityProcessDuration as \"_activityProcessDuration\" \n      group by _caseId, _activityId, _activityProcessDuration\n      \\\n      case\n        when \"_activityProcessDuration\" < 72000000 then 0\n        when \"_activityProcessDuration\" < 720000000 then \n        intDiv(\"_activityProcessDuration\" - 72000000, 3600000 * 20 )+1\n        else 9+1::Int\n      end as __histFieldLvl2"
+        }
+      ],
+      "metrics": [
+        {
+          "expressionType": "SQL",
+          "label": "__activityCount",
+          "sqlExpression": "count(*) as \"__activityCount\"\n      group by 1\n      \\\n      sum(\"__activityCount\")"
+        }
+      ],
+      "orderby": [],
+      "annotation_layers": [],
+      "series_limit": 0,
+      "order_desc": false,
+      "url_params": {
+        "datasource_id": "838",
+        "datasource_type": "table",
+        "viz_type": "histogram_chart"
+      },
+      "custom_params": {},
+      "custom_form_data": [],
+      "time_offsets": [],
+      "post_processing": [
+        {
+          "operation": "pivot",
+          "options": {
+            "index": [
+              "_activityProcessDuration"
+            ],
+            "columns": [],
+            "aggregates": {
+              "__activityCount": {
+                "operator": "mean"
+              }
+            },
+            "drop_missing_columns": true
+          }
+        },
+        {
+          "operation": "flatten"
+        }
+      ]
+    }
+  ],
+  "form_data": {
+    "datasource": "838__table",
+    "viz_type": "histogram_chart",
+    "url_params": {
+      "datasource_id": "838",
+      "datasource_type": "table",
+      "viz_type": "histogram_chart"
+    },
+    "x_axis": {
+      "columnType": "BASE_AXIS",
+      "expressionType": "SQL",
+      "label": "_activityProcessDuration",
+      "sqlExpression": "_caseId, _activityProcessDuration as \"_activityProcessDuration\" \n      group by _caseId, _activityId, _activityProcessDuration\n      \\\n      case\n        when \"_activityProcessDuration\" < 72000000 then 0\n        when \"_activityProcessDuration\" < 720000000 then \n        intDiv(\"_activityProcessDuration\" - 72000000, 3600000 * 20 )+1\n        else 9+1::Int\n      end as __histFieldLvl2",
+      "timeGrain": "P1D"
+    },
+    "x_axis_datetime": false,
+    "granularityStep": 20,
+    "granularityUnit": "h",
+    "granularityRange": [
+      20,
+      200
+    ],
+    "adhoc_filters": [
+      {
+        "clause": "WHERE",
+        "subject": "_caseStartTime",
+        "operator": "TEMPORAL_RANGE",
+        "comparator": "No filter",
+        "expressionType": "SIMPLE"
+      }
+    ],
+    "process_filters": [],
+    "variable_value": [],
+    "metric": {
+      "expressionType": "SQL",
+      "label": "__activityCount",
+      "sqlExpression": "count(*) as \"__activityCount\"\n      group by 1\n      \\\n      sum(\"__activityCount\")"
+    },
+    "y_axis_sql": "count(*) as __activityCount \\ max(__activityCount)::Float64 as  __activityCount",
+    "orientation": "vertical",
+    "x_axis_title_margin": 15,
+    "y_axis_title_margin": 15,
+    "y_axis_title_position": [
+      "Left",
+      "Слева"
+    ],
+    "color_scheme": "supersetColors",
+    "only_total": true,
+    "markerSize": 6,
+    "show_legend": true,
+    "legendType": "scroll",
+    "legendOrientation": "top",
+    "x_axis_time_format": "smart_date",
+    "xAxisLabelRotation": 45,
+    "y_axis_format": "SMART_NUMBER",
+    "splitLine": true,
+    "y_axis_bounds": [
+      null,
+      null
+    ],
+    "rich_tooltip": true,
+    "tooltipTimeFormat": "smart_date",
+    "extra_form_data": {
+      "custom_form_data": []
+    },
+    "force": false,
+    "result_format": "json",
+    "result_type": "results"
+  },
+  "result_format": "json",
+  "result_type": "results"
+}

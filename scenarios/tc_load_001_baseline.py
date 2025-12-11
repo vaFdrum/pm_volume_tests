@@ -14,204 +14,111 @@ from threading import Lock
 from locust import task, between, events
 
 from common.auth import establish_session
-from common.api import Api
+from common.api.load_api import LoadApi
 from common.csv_utils import count_chunks, count_csv_lines
 from common.managers import UserPool
 from common.clickhouse_monitor import ClickHouseMonitor
+from common.report_engine import MetricsCollector, ReportGenerator  # 🆕 Новая система отчетности
 from config import CONFIG
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-class TestMetricsCollector:
-    """
-    Глобальный сборщик метрик для всех пользователей.
-    Агрегирует данные и генерирует общий отчёт.
-    """
-
-    def __init__(self):
-        self.lock = Lock()
-        self.test_runs: List[Dict] = []
-        self.test_start_time = None
-        self.test_end_time = None
-        self.ch_monitor: Optional[ClickHouseMonitor] = None
-        self.locust_metrics: Optional[Dict] = None
-
-    def register_test_run(self, metrics: Dict):
-        """Регистрирует результаты одного test run"""
-        with self.lock:
-            self.test_runs.append(metrics)
-
-    def set_test_times(self, start_time: float, end_time: float):
-        """Устанавливает время начала и конца теста"""
-        with self.lock:
-            if self.test_start_time is None:
-                self.test_start_time = start_time
-            self.test_end_time = end_time
-
-    def set_clickhouse_monitor(self, monitor: ClickHouseMonitor):
-        """Устанавливает ClickHouse монитор"""
-        with self.lock:
-            if self.ch_monitor is None:
-                self.ch_monitor = monitor
-
-    def generate_summary(self) -> str:
-        """Генерирует итоговый отчёт по всем test runs"""
-        with self.lock:
-            if not self.test_runs:
-                return "\n[TC-LOAD-001] No test runs completed\n"
-
-            # Агрегируем метрики
-            total_runs = len(self.test_runs)
-            successful_runs = sum(1 for r in self.test_runs if r.get('success', False))
-            failed_runs = total_runs - successful_runs
-
-            # CSV Upload
-            csv_times = [r['csv_upload_duration'] for r in self.test_runs if 'csv_upload_duration' in r]
-            csv_avg = sum(csv_times) / len(csv_times) if csv_times else 0
-            csv_min = min(csv_times) if csv_times else 0
-            csv_max = max(csv_times) if csv_times else 0
-
-            # DAG #1
-            dag1_times = [r['dag1_duration'] for r in self.test_runs if 'dag1_duration' in r]
-            dag1_avg = sum(dag1_times) / len(dag1_times) if dag1_times else 0
-            dag1_min = min(dag1_times) if dag1_times else 0
-            dag1_max = max(dag1_times) if dag1_times else 0
-            dag1_sla_pass = sum(1 for t in dag1_times if t < 300)
-
-            # DAG #2
-            dag2_times = [r['dag2_duration'] for r in self.test_runs if 'dag2_duration' in r]
-            dag2_avg = sum(dag2_times) / len(dag2_times) if dag2_times else 0
-            dag2_min = min(dag2_times) if dag2_times else 0
-            dag2_max = max(dag2_times) if dag2_times else 0
-            dag2_sla_pass = sum(1 for t in dag2_times if t < 180)
-
-            # Dashboard
-            dash_times = [r['dashboard_duration'] for r in self.test_runs if 'dashboard_duration' in r]
-            dash_avg = sum(dash_times) / len(dash_times) if dash_times else 0
-            dash_min = min(dash_times) if dash_times else 0
-            dash_max = max(dash_times) if dash_times else 0
-            dash_sla_pass = sum(1 for t in dash_times if t < 3)
-
-            # Total duration
-            total_times = [r['total_duration'] for r in self.test_runs if 'total_duration' in r]
-            total_avg = sum(total_times) / len(total_times) if total_times else 0
-
-            # Время теста
-            test_duration = self.test_end_time - self.test_start_time if self.test_start_time and self.test_end_time else 0
-
-            # Получаем первый run для конфигурации
-            first_run = self.test_runs[0]
-
-            lines = [
-                "",
-                "=" * 80,
-                "TC-LOAD-001: BASELINE TEST REPORT (AGGREGATED)",
-                "=" * 80,
-                "",
-                "ИНФОРМАЦИЯ О ТЕСТЕ",
-                "-" * 50,
-                f"Дата проведения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                f"Окружение: {CONFIG.get('api', {}).get('base_url', 'N/A')}",
-                f"Тип теста: Baseline Load Test",
-                f"Длительность теста: {test_duration:.2f}s ({test_duration/60:.1f} min)",
-                f"Всего запусков: {total_runs}",
-                f"Успешных: {successful_runs} ({successful_runs/total_runs*100:.1f}%)",
-                f"Неудачных: {failed_runs} ({failed_runs/total_runs*100:.1f}%)" if failed_runs > 0 else "",
-                "",
-                "КОНФИГУРАЦИЯ ТЕСТА",
-                "-" * 50,
-                f"Количество пользователей: 1 (baseline)",
-                f"Размер файла: {first_run.get('file_size', 'N/A')}",
-                f"Количество строк: {first_run.get('total_lines', 0):,}",
-                f"Chunks: {first_run.get('total_chunks', 0)}",
-                "",
-                "РЕЗУЛЬТАТЫ ПРОИЗВОДИТЕЛЬНОСТИ",
-                "-" * 50,
-                f"CSV Upload Time:",
-                f"  Среднее: {csv_avg:.2f}s",
-                f"  Мин: {csv_min:.2f}s | Макс: {csv_max:.2f}s",
-                "",
-                f"DAG #1 Duration (ClickHouse Import):",
-                f"  Среднее: {dag1_avg:.2f}s ({dag1_avg/60:.1f} min)",
-                f"  Мин: {dag1_min:.2f}s | Макс: {dag1_max:.2f}s",
-                "",
-                f"DAG #2 Duration (PM Dashboard):",
-                f"  Среднее: {dag2_avg:.2f}s ({dag2_avg/60:.1f} min)",
-                f"  Мин: {dag2_min:.2f}s | Макс: {dag2_max:.2f}s",
-                "",
-                f"Dashboard Load:",
-                f"  Среднее: {dash_avg:.2f}s",
-                f"  Мин: {dash_min:.2f}s | Макс: {dash_max:.2f}s",
-                "",
-                f"Total Scenario Duration:",
-                f"  Среднее: {total_avg:.2f}s ({total_avg/60:.1f} min)",
-                "",
-            ]
-
-            # Locust HTTP метрики (если доступны)
-            if self.locust_metrics:
-                lm = self.locust_metrics
-                lines.extend([
-                    "HTTP МЕТРИКИ (Locust Stats)",
-                    "-" * 50,
-                    f"Total Requests: {lm.get('total_requests', 0):,}",
-                    f"Total Failures: {lm.get('total_failures', 0):,}",
-                    f"RPS (средний): {lm.get('total_rps', 0):.2f} req/s",
-                    f"Response Time (средний): {lm.get('avg_response_time', 0):.0f} ms",
-                    f"Response Time (медиана): {lm.get('median_response_time', 0):.0f} ms",
-                    f"Response Time (P95): {lm.get('percentile_95', 0):.0f} ms",
-                    f"Response Time (P99): {lm.get('percentile_99', 0):.0f} ms",
-                    "",
-                ])
-
-            lines.extend([
-                "SLA VALIDATION",
-                "-" * 50,
-                f"DAG #1 (< 5 min): {dag1_sla_pass}/{len(dag1_times)} прошли ({'✓ PASS' if dag1_sla_pass == len(dag1_times) else '✗ FAIL'})",
-                f"DAG #2 (< 3 min): {dag2_sla_pass}/{len(dag2_times)} прошли ({'✓ PASS' if dag2_sla_pass == len(dag2_times) else '✗ FAIL'})",
-                f"Dashboard (< 3s): {dash_sla_pass}/{len(dash_times)} прошли ({'✓ PASS' if dash_sla_pass == len(dash_times) else '✗ FAIL'})",
-                "",
-            ])
-
-            # Добавляем ClickHouse метрики если есть
-            if self.ch_monitor:
-                lines.append(self.ch_monitor.format_summary_report())
-            else:
-                lines.extend([
-                    "CLICKHOUSE МЕТРИКИ",
-                    "-" * 50,
-                    "[ClickHouse monitoring disabled or unavailable]",
-                    "",
-                ])
-
-            lines.extend([
-                "РЕСУРСЫ СИСТЕМЫ",
-                "-" * 50,
-                "CPU: [manual input required]",
-                "Memory: [manual input required]",
-                "Disk I/O: [manual input required]",
-                "Network: [manual input required]",
-                "",
-                "=" * 80,
-            ])
-
-            return "\n".join(lines)
+# ============================================================================
+# 🆕 ENHANCED REPORTING SYSTEM
+# ============================================================================
+# Создаем глобальный collector для сбора метрик
+# Используем новую систему с автоматическими percentiles, SLO tracking и multi-format export
+_metrics_collector = MetricsCollector(test_name="TC-LOAD-001")
 
 
-# Глобальный collector
-_test_metrics_collector = TestMetricsCollector()
+# ============================================================================
+# 📊 SLO DEFINITIONS (Service Level Objectives)
+# ============================================================================
+# SLO = конкретные измеримые цели для производительности системы
+# Формат: collector.define_slo(metric_name, threshold, comparison)
+#
+# ⚙️ КАК НАСТРОИТЬ ПОСЛЕ ПОЛУЧЕНИЯ РЕАЛЬНЫХ ДАННЫХ:
+# 1. Запустите TC-LOAD-001 первый раз
+# 2. Посмотрите отчет в ./logs/tc_load_001_report_*.txt
+# 3. Найдите секцию "PERFORMANCE METRICS" -> смотрите P95 (95-й перцентиль)
+# 4. Установите threshold = P95 * 1.2 (добавляем 20% запас)
+# 5. Обновите значения ниже
+#
+# Пример расчета:
+#   Если в отчете видите "P95: 285.3s" для dag1_duration
+#   То threshold = 285.3 * 1.2 = 342.36 ≈ 350 секунд
+#
+# ============================================================================
+
+# SLO #1: DAG #1 Duration (ClickHouse Import)
+# 📝 Описание: Время импорта CSV данных в ClickHouse
+# 🎯 Текущий порог: 300 секунд (5 минут) - из README.md
+# 📊 Где смотреть реальные данные: отчет -> "DAG #1 Duration" -> "P95"
+# ✏️ Как изменить: замените 300 на реальное значение P95 * 1.2
+_metrics_collector.define_slo(
+    name="dag1_duration",           # Имя метрики (НЕ МЕНЯТЬ!)
+    threshold=300,                   # ⬅️ ИЗМЕНИТЬ на основе P95 из отчета
+    comparison="less_than"           # Должно быть МЕНЬШЕ порога
+)
+
+# SLO #2: DAG #2 Duration (PM Dashboard Creation)
+# 📝 Описание: Время создания Process Mining дашборда
+# 🎯 Текущий порог: 180 секунд (3 минуты) - из README.md
+# 📊 Где смотреть реальные данные: отчет -> "DAG #2 Duration" -> "P95"
+# ✏️ Как изменить: замените 180 на реальное значение P95 * 1.2
+_metrics_collector.define_slo(
+    name="dag2_duration",           # Имя метрики (НЕ МЕНЯТЬ!)
+    threshold=180,                   # ⬅️ ИЗМЕНИТЬ на основе P95 из отчета
+    comparison="less_than"           # Должно быть МЕНЬШЕ порога
+)
+
+# SLO #3: Dashboard Load Time
+# 📝 Описание: Время загрузки дашборда в браузере
+# 🎯 Текущий порог: 3 секунды - из README.md
+# 📊 Где смотреть реальные данные: отчет -> "Dashboard Load Time" -> "P95"
+# ✏️ Как изменить: замените 3 на реальное значение P95 * 1.2
+_metrics_collector.define_slo(
+    name="dashboard_duration",      # Имя метрики (НЕ МЕНЯТЬ!)
+    threshold=3,                     # ⬅️ ИЗМЕНИТЬ на основе P95 из отчета
+    comparison="less_than"           # Должно быть МЕНЬШЕ порога
+)
+
+# 💡 ДОПОЛНИТЕЛЬНЫЕ SLO (опционально):
+# Раскомментируйте если нужны дополнительные проверки
+
+# SLO #4: CSV Upload Time
+# _metrics_collector.define_slo(
+#     name="csv_upload_duration",
+#     threshold=60,                   # ⬅️ Установите на основе данных
+#     comparison="less_than"
+# )
+
+# SLO #5: Total Scenario Duration
+# _metrics_collector.define_slo(
+#     name="total_duration",
+#     threshold=600,                  # ⬅️ Установите на основе данных (10 минут)
+#     comparison="less_than"
+# )
+
+# ============================================================================
+# 📌 ВАЖНО:
+# - После первого запуска с текущими порогами - проверьте отчет
+# - Если SLO FAIL - это нормально, порог слишком строгий
+# - Настройте пороги на основе реальных P95 значений
+# - Target compliance: >= 95% (т.е. 95% запусков должны укладываться в SLO)
+# ============================================================================
 
 
-def get_metrics_collector() -> TestMetricsCollector:
+def get_metrics_collector() -> MetricsCollector:
     """Возвращает глобальный metrics collector"""
-    return _test_metrics_collector
+    return _metrics_collector
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-class TC_LOAD_001_Baseline(Api):
+class TC_LOAD_001_Baseline(LoadApi):
     """
     TC-LOAD-001: Baseline Load Test
 
@@ -260,7 +167,7 @@ class TC_LOAD_001_Baseline(Api):
         ch_config = CONFIG.get("clickhouse", {})
 
         if not ch_config.get("enabled", False):
-            self.log("[TC-LOAD-001] ClickHouse monitoring disabled")
+            self._log_msg("ClickHouse monitoring disabled")
             return
 
         try:
@@ -273,15 +180,15 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if self.ch_monitor.check_connection():
-                self.log("[TC-LOAD-001] ClickHouse monitor initialized successfully")
+                self._log_msg("ClickHouse monitor initialized successfully")
                 # Регистрируем в глобальном collector
                 get_metrics_collector().set_clickhouse_monitor(self.ch_monitor)
             else:
-                self.log("[TC-LOAD-001] ClickHouse connection failed, monitoring disabled", logging.WARNING)
+                self._log_msg("ClickHouse connection failed, monitoring disabled", logging.WARNING)
                 self.ch_monitor = None
 
         except Exception as e:
-            self.log(f"[TC-LOAD-001] Failed to initialize ClickHouse monitor: {e}", logging.ERROR)
+            self._log_msg(f"Failed to initialize ClickHouse monitor: {e}", logging.ERROR)
             self.ch_monitor = None
 
     def _format_file_size(self) -> str:
@@ -297,6 +204,10 @@ class TC_LOAD_001_Baseline(Api):
             pass
         return "N/A"
 
+    def _log_msg(self, message: str, level=logging.INFO):
+        """Helper для упрощения логирования с автоматическим префиксом [TC-LOAD-001]"""
+        self.log(f"[TC-LOAD-001] {message}", level)
+
     def establish_session(self):
         """Establish user session with authentication"""
         success = establish_session(
@@ -310,9 +221,9 @@ class TC_LOAD_001_Baseline(Api):
         if success:
             self.logged_in = True
             self.session_valid = True
-            self.log(f"[TC-LOAD-001] Authentication successful for {self.username}")
+            self._log_msg(f"Authentication successful for {self.username}")
         else:
-            self.log("[TC-LOAD-001] Authentication failed", logging.ERROR)
+            self._log_msg("Authentication failed", logging.ERROR)
             self.interrupt()
 
     def on_start(self):
@@ -328,7 +239,7 @@ class TC_LOAD_001_Baseline(Api):
         self.client.verify = False
 
         self.establish_session()
-        self.log("[TC-LOAD-001] Baseline test started")
+        self._log_msg("Baseline test started")
 
         # Устанавливаем время старта в глобальном collector
         get_metrics_collector().set_test_times(time.time(), time.time())
@@ -345,7 +256,7 @@ class TC_LOAD_001_Baseline(Api):
             self.ch_monitor.stop_monitoring()
             self.ch_monitor.collect_final()
 
-        self.log("[TC-LOAD-001] Baseline test stopped")
+        self._log_msg("Baseline test stopped")
 
     @task
     def run_baseline_scenario(self):
@@ -360,16 +271,16 @@ class TC_LOAD_001_Baseline(Api):
         if not self.logged_in:
             self.establish_session()
             if not self.logged_in:
-                self.log("[TC-LOAD-001] Failed to establish session", logging.ERROR)
+                self._log_msg("Failed to establish session", logging.ERROR)
                 return
 
-        self.log("[TC-LOAD-001] Starting baseline scenario")
+        self._log_msg("Starting baseline scenario")
         self.test_start_time = time.time()
         scenario_start = time.time()
 
         try:
             # ========== PHASE 1: CSV Upload & File Import Flow ==========
-            self.log("[TC-LOAD-001][PHASE 1] CSV Upload & File Import")
+            self._log_msg("[PHASE 1] CSV Upload & File Import")
             phase1_start = time.time()
 
             # 1. Создание flow для загрузки файла
@@ -377,15 +288,15 @@ class TC_LOAD_001_Baseline(Api):
             self.flow_id = flow_id
 
             if not flow_id:
-                self.log("[TC-LOAD-001] Failed to create flow", logging.ERROR)
+                self._log_msg("Failed to create flow", logging.ERROR)
                 return
 
-            self.log(f"[TC-LOAD-001] File flow created: {flow_name} (ID: {flow_id})")
+            self._log_msg(f"File flow created: {flow_name} (ID: {flow_id})")
 
             # 2. Получение параметров DAG
             target_connection, target_schema = self._get_dag_import_params(flow_id)
             if not target_connection or not target_schema:
-                self.log("[TC-LOAD-001] Missing DAG parameters", logging.ERROR)
+                self._log_msg("Missing DAG parameters", logging.ERROR)
                 return
 
             # 3. Обновление flow перед загрузкой
@@ -398,17 +309,17 @@ class TC_LOAD_001_Baseline(Api):
                 count_chunks_val=self.total_chunks,
             )
             if not update_resp or not update_resp.ok:
-                self.log("[TC-LOAD-001] Failed to update flow before upload", logging.ERROR)
+                self._log_msg("Failed to update flow before upload", logging.ERROR)
                 return
 
             # 4. Получение ID базы данных пользователя
             db_id = self._get_user_database_id()
             if not db_id:
-                self.log("[TC-LOAD-001] User database not found", logging.ERROR)
+                self._log_msg("User database not found", logging.ERROR)
                 return
 
             if self.total_chunks == 0:
-                self.log("[TC-LOAD-001] No chunks to upload", logging.WARNING)
+                self._log_msg("No chunks to upload", logging.WARNING)
                 return
 
             timeout = (
@@ -426,14 +337,14 @@ class TC_LOAD_001_Baseline(Api):
             uploaded_chunks = self._upload_chunks(flow_id, db_id, target_schema, self.total_chunks)
             csv_upload_duration = time.time() - csv_upload_start
             self.csv_upload_duration = csv_upload_duration
-            self.log(f"[TC-LOAD-001] CSV upload completed: {uploaded_chunks}/{self.total_chunks} chunks in {csv_upload_duration:.2f}s")
+            self._log_msg(f"CSV upload completed: {uploaded_chunks}/{self.total_chunks} chunks in {csv_upload_duration:.2f}s")
 
             # 7. Финализация загрузки
             if not self._finalize_file_upload(flow_id, uploaded_chunks, timeout):
                 return
 
             # ========== DAG #1: File Processing (ClickHouse Import) ==========
-            self.log("[TC-LOAD-001][PHASE 2] DAG #1: ClickHouse Import")
+            self._log_msg("[PHASE 2] DAG #1: ClickHouse Import")
             dag1_start = time.time()
 
             # 8. Начало обработки файла
@@ -451,23 +362,23 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not success:
-                self.log("[TC-LOAD-001] DAG #1 processing failed", logging.ERROR)
+                self._log_msg("DAG #1 processing failed", logging.ERROR)
                 return
 
             dag1_duration = time.time() - dag1_start
             self.dag1_duration = dag1_duration
             phase1_duration = time.time() - phase1_start
-            self.log(f"[TC-LOAD-001] DAG #1 completed in {dag1_duration:.2f}s")
-            self.log(f"[TC-LOAD-001][PHASE 1] Completed in {phase1_duration:.2f}s")
+            self._log_msg(f"DAG #1 completed in {dag1_duration:.2f}s")
+            self._log_msg(f"[PHASE 1] Completed in {phase1_duration:.2f}s")
 
             # ========== PHASE 2: Process Mining Flow ==========
-            self.log("[TC-LOAD-001][PHASE 3] DAG #2: Process Mining Dashboard")
+            self._log_msg("[PHASE 3] DAG #2: Process Mining Dashboard")
             phase2_start = time.time()
 
             # 10. Получаем параметры для PM блока
             source_connection, source_schema = self._get_dag_pm_params(flow_id)
             if not all([source_connection, source_schema]):
-                self.log("[TC-LOAD-001] Missing PM DAG parameters", logging.ERROR)
+                self._log_msg("Missing PM DAG parameters", logging.ERROR)
                 return
 
             # 11. Создаем PM flow
@@ -481,11 +392,11 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not pm_flow_id:
-                self.log("[TC-LOAD-001] Failed to create Process Mining flow", logging.ERROR)
+                self._log_msg("Failed to create Process Mining flow", logging.ERROR)
                 return
 
             self.pm_flow_id = pm_flow_id
-            self.log(f"[TC-LOAD-001] PM Flow created: {pm_flow_name} (ID: {pm_flow_id})")
+            self._log_msg(f"PM Flow created: {pm_flow_name} (ID: {pm_flow_id})")
 
             # 12. Запускаем Process Mining flow (DAG #2)
             dag2_start = time.time()
@@ -494,7 +405,7 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not pm_run_id:
-                self.log("[TC-LOAD-001] Failed to start Process Mining flow", logging.ERROR)
+                self._log_msg("Failed to start Process Mining flow", logging.ERROR)
                 return
 
             # 13. Мониторинг статуса Process Mining
@@ -504,15 +415,15 @@ class TC_LOAD_001_Baseline(Api):
             )
 
             if not (isinstance(pm_result, dict) and pm_result.get("success")):
-                self.log("[TC-LOAD-001] DAG #2 processing failed", logging.ERROR)
+                self._log_msg("DAG #2 processing failed", logging.ERROR)
                 return
 
             dag2_duration = time.time() - dag2_start
             self.dag2_duration = dag2_duration
-            self.log(f"[TC-LOAD-001] DAG #2 completed in {dag2_duration:.2f}s")
+            self._log_msg(f"DAG #2 completed in {dag2_duration:.2f}s")
 
             # ========== PHASE 3: Dashboard Interaction ==========
-            self.log("[TC-LOAD-001][PHASE 4] Dashboard Interaction")
+            self._log_msg("[PHASE 4] Dashboard Interaction")
 
             # 14. Получаем block_run_ids и открываем дашборд
             block_run_ids = pm_result.get("block_run_ids", {})
@@ -536,22 +447,22 @@ class TC_LOAD_001_Baseline(Api):
                     self.dashboard_duration = dashboard_duration
 
                     if dashboard_loaded:
-                        self.log(f"[TC-LOAD-001] Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
+                        self._log_msg(f"Dashboard loaded in {dashboard_duration:.2f}s: {dashboard_url}")
                     else:
-                        self.log("[TC-LOAD-001] Failed to load dashboard", logging.WARNING)
+                        self._log_msg("Failed to load dashboard", logging.WARNING)
                 else:
-                    self.log("[TC-LOAD-001] Could not retrieve dashboard URL", logging.WARNING)
+                    self._log_msg("Could not retrieve dashboard URL", logging.WARNING)
             else:
-                self.log(f"[TC-LOAD-001] block_run_id not found for {target_block_id}", logging.WARNING)
+                self._log_msg(f"block_run_id not found for {target_block_id}", logging.WARNING)
 
             phase2_duration = time.time() - phase2_start
-            self.log(f"[TC-LOAD-001][PHASE 3] Completed in {phase2_duration:.2f}s")
+            self._log_msg(f"[PHASE 3] Completed in {phase2_duration:.2f}s")
 
             # ========== Scenario Complete ==========
             total_duration = time.time() - scenario_start
             self.total_duration = total_duration
-            self.log(
-                f"[TC-LOAD-001] Baseline scenario completed successfully in {total_duration:.2f}s "
+            self._log_msg(
+                f"Baseline scenario completed successfully in {total_duration:.2f}s "
                 f"(CSV: {self.csv_upload_duration:.2f}s, DAG#1: {self.dag1_duration:.2f}s, DAG#2: {self.dag2_duration:.2f}s)"
             )
 
@@ -575,7 +486,7 @@ class TC_LOAD_001_Baseline(Api):
             get_metrics_collector().set_test_times(self.test_start_time, time.time())
 
         except Exception as e:
-            self.log(f"[TC-LOAD-001] Unexpected error in baseline scenario: {str(e)}", logging.ERROR)
+            self._log_msg(f"Unexpected error in baseline scenario: {str(e)}", logging.ERROR)
 
             # Регистрируем failed run
             get_metrics_collector().register_test_run({
@@ -597,14 +508,14 @@ def on_test_stop(environment, **kwargs):
         if TC_LOAD_001_Baseline not in SupersetUser.tasks:
             return  # Этот тест не запущен, пропускаем
     except Exception:
-        pass  # Если не можем проверить - продолжаем
+        return  # Если не можем проверить - пропускаем (другой тест запущен)
 
     collector = get_metrics_collector()
 
     # Останавливаем ClickHouse мониторинг если есть
-    if collector.ch_monitor:
-        collector.ch_monitor.stop_monitoring()
-        collector.ch_monitor.collect_final()
+    if collector.clickhouse_monitor:
+        collector.clickhouse_monitor.stop_monitoring()
+        collector.clickhouse_monitor.collect_final()
 
     # Собираем Locust stats для RPS и Response Time
     stats = environment.stats
@@ -619,16 +530,30 @@ def on_test_stop(environment, **kwargs):
     }
     collector.locust_metrics = locust_metrics
 
-    # Генерируем и выводим общий summary
-    summary = collector.generate_summary()
-    print(summary)
+    # ============================================================================
+    # 🆕 ГЕНЕРАЦИЯ ENHANCED ОТЧЕТОВ
+    # ============================================================================
+    # Используем новую систему отчетности с:
+    # - Автоматическими percentiles (P50, P75, P90, P95, P99)
+    # - SLO compliance tracking
+    # - Error analysis
+    # - Smart recommendations
+    # - Multiple formats: Text, JSON, CSV
+    # ============================================================================
 
-    # Сохраняем в файл
+    # Генерируем отчеты с помощью ReportGenerator
+    generator = ReportGenerator(collector)
+
+    # Выводим текстовый отчет в консоль
+    text_report = generator.generate_text_report()
+    print("\n" + text_report)
+
+    # Сохраняем все форматы отчетов (Text, JSON, CSV)
     try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = f"./logs/tc_load_001_report_{timestamp}.txt"
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(summary)
-        print(f"\n[TC-LOAD-001] Report saved to: {report_path}\n")
+        saved_files = generator.save_reports(output_dir="./logs")
+        print(f"\n[TC-LOAD-001] ✓ Successfully saved {len(saved_files)} report files:")
+        for filepath in saved_files:
+            print(f"  - {filepath}")
+        print()
     except Exception as e:
-        print(f"\n[TC-LOAD-001] Failed to save report: {e}\n")
+        print(f"\n[TC-LOAD-001] ✗ Failed to save reports: {e}\n")

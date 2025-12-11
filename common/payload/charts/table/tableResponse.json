@@ -1,0 +1,175 @@
+{
+  "result": [
+    {
+      "data": [
+        {
+          "_activity": "A",
+          "__activityCount": 15,
+          "__activityCyclePercent": 0.3333333333333333,
+          "__caseCount": 10,
+          "count": 15,
+          "__transitionCount": 15,
+          "__reworkActivityCnt": 5,
+          "__transitionCyclePercent": 0.33333333333333337,
+          "__variantCount": 7
+        },
+        {
+          "_activity": "C",
+          "__activityCount": 12,
+          "__activityCyclePercent": 0.16666666666666666,
+          "__caseCount": 10,
+          "count": 12,
+          "__transitionCount": 12,
+          "__reworkActivityCnt": 2,
+          "__transitionCyclePercent": 0.16666666666666663,
+          "__variantCount": 7
+        },
+        {
+          "_activity": "B",
+          "__activityCount": 10,
+          "__activityCyclePercent": 0.2,
+          "__caseCount": 8,
+          "count": 10,
+          "__transitionCount": 10,
+          "__reworkActivityCnt": 2,
+          "__transitionCyclePercent": 0.19999999999999996,
+          "__variantCount": 5
+        },
+        {
+          "_activity": "D",
+          "__activityCount": 6,
+          "__activityCyclePercent": 0,
+          "__caseCount": 6,
+          "count": 6,
+          "__transitionCount": 6,
+          "__reworkActivityCnt": 0,
+          "__transitionCyclePercent": 0,
+          "__variantCount": 4
+        },
+        {
+          "_activity": "Z",
+          "__activityCount": 5,
+          "__activityCyclePercent": 0.8,
+          "__caseCount": 1,
+          "count": 5,
+          "__transitionCount": 5,
+          "__reworkActivityCnt": 4,
+          "__transitionCyclePercent": 0.8,
+          "__variantCount": 1
+        },
+        {
+          "_activity": "E",
+          "__activityCount": 4,
+          "__activityCyclePercent": 0,
+          "__caseCount": 4,
+          "count": 4,
+          "__transitionCount": 4,
+          "__reworkActivityCnt": 0,
+          "__transitionCyclePercent": 0,
+          "__variantCount": 3
+        },
+        {
+          "_activity": "F",
+          "__activityCount": 3,
+          "__activityCyclePercent": 0,
+          "__caseCount": 3,
+          "count": 3,
+          "__transitionCount": 3,
+          "__reworkActivityCnt": 0,
+          "__transitionCyclePercent": 0,
+          "__variantCount": 2
+        },
+        {
+          "_activity": "G",
+          "__activityCount": 3,
+          "__activityCyclePercent": 0,
+          "__caseCount": 3,
+          "count": 3,
+          "__transitionCount": 3,
+          "__reworkActivityCnt": 0,
+          "__transitionCyclePercent": 0,
+          "__variantCount": 2
+        },
+        {
+          "_activity": "P",
+          "__activityCount": 3,
+          "__activityCyclePercent": 0.6666666666666666,
+          "__caseCount": 1,
+          "count": 3,
+          "__transitionCount": 3,
+          "__reworkActivityCnt": 2,
+          "__transitionCyclePercent": 0.6666666666666667,
+          "__variantCount": 1
+        },
+        {
+          "_activity": "L",
+          "__activityCount": 2,
+          "__activityCyclePercent": 0.5,
+          "__caseCount": 1,
+          "count": 2,
+          "__transitionCount": 2,
+          "__reworkActivityCnt": 1,
+          "__transitionCyclePercent": 0.5,
+          "__variantCount": 1
+        },
+        {
+          "_activity": "J",
+          "__activityCount": 2,
+          "__activityCyclePercent": 0.5,
+          "__caseCount": 1,
+          "count": 2,
+          "__transitionCount": 2,
+          "__reworkActivityCnt": 1,
+          "__transitionCyclePercent": 0.5,
+          "__variantCount": 1
+        },
+        {
+          "_activity": "Q",
+          "__activityCount": 1,
+          "__activityCyclePercent": 0,
+          "__caseCount": 1,
+          "count": 1,
+          "__transitionCount": 1,
+          "__reworkActivityCnt": 0,
+          "__transitionCyclePercent": 0,
+          "__variantCount": 1
+        },
+        {
+          "_activity": "V",
+          "__activityCount": 1,
+          "__activityCyclePercent": 0,
+          "__caseCount": 1,
+          "count": 1,
+          "__transitionCount": 1,
+          "__reworkActivityCnt": 0,
+          "__transitionCyclePercent": 0,
+          "__variantCount": 1
+        }
+      ],
+      "rowcount": 13,
+      "sql_rowcount": 13,
+      "colnames": [
+        "_activity",
+        "__activityCount",
+        "__activityCyclePercent",
+        "__caseCount",
+        "count",
+        "__transitionCount",
+        "__reworkActivityCnt",
+        "__transitionCyclePercent",
+        "__variantCount"
+      ],
+      "coltypes": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

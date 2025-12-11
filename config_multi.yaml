@@ -12,6 +12,13 @@ scenarios:
     - tc_load_001
   tc_load_002:
     - tc_load_002
+  tc_load_003:
+    - tc_load_003_heavy
+    - tc_load_003_light
+  tc_load_003_heavy:
+    - tc_load_003_heavy
+  tc_load_003_light:
+    - tc_load_003_light
 
 api:
   base_url: FROM_ENV

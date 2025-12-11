@@ -1,0 +1,191 @@
+{
+  "result": [
+    {
+      "cached_dttm": null,
+      "applied_template_filters": [],
+      "annotation_data": {},
+      "error": null,
+      "is_cached": null,
+      "status": "success",
+      "stacktrace": null,
+      "rowcount": 24,
+      "from_dttm": null,
+      "label_map": {
+        "_activity": [
+          "_activity"
+        ],
+        "_parentActivity": [
+          "_parentActivity"
+        ],
+        "__transitionCount": [
+          "__transitionCount"
+        ]
+      },
+      "colnames": [
+        "_activity",
+        "_parentActivity",
+        "__transitionCount"
+      ],
+      "indexnames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "coltypes": [
+        1,
+        1,
+        0
+      ],
+      "data": [
+        {
+          "_activity": "A",
+          "_parentActivity": "A",
+          "__transitionCount": 2.0
+        },
+        {
+          "_activity": "V",
+          "_parentActivity": "Z",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "C",
+          "_parentActivity": "A",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "L",
+          "_parentActivity": "J",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "L",
+          "_parentActivity": "L",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "P",
+          "_parentActivity": "A",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "E",
+          "_parentActivity": "D",
+          "__transitionCount": 4.0
+        },
+        {
+          "_activity": "J",
+          "_parentActivity": "",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "C",
+          "_parentActivity": "B",
+          "__transitionCount": 10.0
+        },
+        {
+          "_activity": "G",
+          "_parentActivity": "F",
+          "__transitionCount": 3.0
+        },
+        {
+          "_activity": "Z",
+          "_parentActivity": "V",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "P",
+          "_parentActivity": "C",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "C",
+          "_parentActivity": "",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "A",
+          "_parentActivity": "",
+          "__transitionCount": 9.0
+        },
+        {
+          "_activity": "Q",
+          "_parentActivity": "A",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "F",
+          "_parentActivity": "E",
+          "__transitionCount": 3.0
+        },
+        {
+          "_activity": "J",
+          "_parentActivity": "L",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "Z",
+          "_parentActivity": "Z",
+          "__transitionCount": 3.0
+        },
+        {
+          "_activity": "Z",
+          "_parentActivity": "",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "A",
+          "_parentActivity": "C",
+          "__transitionCount": 2.0
+        },
+        {
+          "_activity": "B",
+          "_parentActivity": "A",
+          "__transitionCount": 10.0
+        },
+        {
+          "_activity": "A",
+          "_parentActivity": "P",
+          "__transitionCount": 2.0
+        },
+        {
+          "_activity": "P",
+          "_parentActivity": "",
+          "__transitionCount": 1.0
+        },
+        {
+          "_activity": "D",
+          "_parentActivity": "C",
+          "__transitionCount": 6.0
+        }
+      ],
+      "result_format": "json",
+      "applied_filters": [
+        {
+          "column": "_caseStartTime"
+        }
+      ],
+      "rejected_filters": []
+    }
+  ]
+}
