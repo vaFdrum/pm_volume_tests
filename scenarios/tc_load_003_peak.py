@@ -666,7 +666,13 @@ class TC_LOAD_003_Light(LoadApi):
         """
         Инициализация Light user
 
-        ВАЖНО: Ждём появления дашбордов от Heavy users!
+        Логика:
+        1. Авторизация
+        2. Инициализация ChartApi
+        3. Проверка DashboardPool:
+           - Если пустой → загружаем дашборды из API (автономный режим)
+           - Если не пустой → используем существующие (от Heavy users)
+        4. Если дашбордов нет → ждём Heavy users (fallback)
         """
 
         # 1. Авторизация
@@ -685,15 +691,34 @@ class TC_LOAD_003_Light(LoadApi):
         # 2. Инициализируем ChartApi
         self.chart_api = ChartApi(self.client, self.log)
 
-        # 3. Ждём дашборды
-        self._log_msg("Waiting for dashboards from Heavy users...")
+        # 3. Проверяем DashboardPool
+        pool = get_dashboard_pool_003()
 
-        if not get_dashboard_pool_003().wait_until_available(timeout=600):
-            self._log_msg(f"Timeout: No dashboards available after 10 min", logging.WARNING)
-            self.interrupt()
-            return
+        if not pool.has_dashboards():
+            # Автономный режим: загружаем дашборды из API
+            self._log_msg("DashboardPool is empty, loading dashboards from API...")
 
-        self._log_msg(f"Dashboards available ({get_dashboard_pool_003().count()})! Starting UI operations")
+            dashboard_urls = self.chart_api.get_available_dashboards(
+                page_size=100,
+                exclude_ids=list(range(1, 15))  # Исключаем ID 1-14
+            )
+
+            if dashboard_urls:
+                # Добавляем загруженные дашборды в пул
+                for url in dashboard_urls:
+                    pool.add(url, owner="api_loaded")
+
+                self._log_msg(f"Loaded {len(dashboard_urls)} dashboards from API")
+            else:
+                # Fallback: ждём Heavy users
+                self._log_msg("No dashboards from API, waiting for Heavy users...")
+
+                if not pool.wait_until_available(timeout=600):
+                    self._log_msg("Timeout: No dashboards available after 10 min", logging.WARNING)
+                    self.interrupt()
+                    return
+
+        self._log_msg(f"Dashboards available ({pool.count()})! Starting UI operations")
 
     def on_stop(self):
         """
