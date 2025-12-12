@@ -10,7 +10,7 @@ import logging
 import os
 import random
 import re
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 
 
 class ChartApi:
@@ -376,3 +376,65 @@ class ChartApi:
         except Exception as e:
             self.log(f"Error getting dashboard info: {e}", logging.ERROR)
             return None
+
+    def get_available_dashboards(
+        self,
+        page_size: int = 100,
+        exclude_ids: Optional[List[int]] = None
+    ) -> List[str]:
+        """
+        Получает список доступных дашбордов из Superset API
+
+        GET /api/v1/dashboard/?q=(page_size:100)
+
+        Args:
+            page_size: Количество дашбордов для загрузки (по умолчанию 100)
+            exclude_ids: Список ID дашбордов для исключения (по умолчанию 1-14)
+
+        Returns:
+            Список URL дашбордов (формат: /superset/dashboard/{id}/)
+        """
+        # По умолчанию исключаем системные дашборды с ID 1-14
+        if exclude_ids is None:
+            exclude_ids = list(range(1, 15))  # [1, 2, 3, ..., 14]
+
+        api_url = f"/api/v1/dashboard/?q=(page_size:{page_size})"
+        self.log(f"Fetching available dashboards: {api_url}")
+
+        try:
+            response = self.client.get(
+                api_url,
+                name="[ChartApi] Get Dashboards List",
+                headers={"Content-Type": "application/json"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                all_ids = data.get("ids", [])
+                count = data.get("count", 0)
+
+                # Фильтруем исключённые ID
+                filtered_ids = [
+                    dashboard_id for dashboard_id in all_ids
+                    if dashboard_id not in exclude_ids
+                ]
+
+                # Формируем URL для каждого дашборда
+                dashboard_urls = [
+                    f"/superset/dashboard/{dashboard_id}/"
+                    for dashboard_id in filtered_ids
+                ]
+
+                self.log(
+                    f"Found {count} dashboards, {len(filtered_ids)} after filtering "
+                    f"(excluded IDs: {min(exclude_ids)}-{max(exclude_ids)})"
+                )
+
+                return dashboard_urls
+            else:
+                self.log(f"Failed to get dashboards list: {response.status_code}", logging.ERROR)
+                return []
+
+        except Exception as e:
+            self.log(f"Error getting dashboards list: {e}", logging.ERROR)
+            return []
