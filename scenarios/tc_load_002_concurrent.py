@@ -61,7 +61,7 @@ _metrics_collector = MetricsCollector(test_name="TC-LOAD-002")
 # ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
 _metrics_collector.define_slo(
     name="dag1_duration",
-    threshold=450,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 1.5
+    threshold=77.63,                 # P95_baseline (51.75s) × 1.5 = 77.63s
     comparison="less_than"
 )
 
@@ -72,7 +72,7 @@ _metrics_collector.define_slo(
 # ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
 _metrics_collector.define_slo(
     name="dag2_duration",
-    threshold=270,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 1.5
+    threshold=154.82,                # P95_baseline (103.21s) × 1.5 = 154.82s
     comparison="less_than"
 )
 
@@ -83,7 +83,23 @@ _metrics_collector.define_slo(
 # ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
 _metrics_collector.define_slo(
     name="dashboard_duration",
-    threshold=4.5,                   # ⬅️ ИЗМЕНИТЬ: P95_baseline * 1.5
+    threshold=0.96,                  # P95_baseline (0.64s) × 1.5 = 0.96s
+    comparison="less_than"
+)
+
+# SLO #4: CSV Upload Time для Concurrent теста
+# 📝 Описание: Время загрузки CSV файла при 3 параллельных пользователях
+_metrics_collector.define_slo(
+    name="csv_upload_duration",
+    threshold=146.30,                # P95_baseline (97.53s) × 1.5 = 146.30s
+    comparison="less_than"
+)
+
+# SLO #5: Total Scenario Duration для Concurrent теста
+# 📝 Описание: Полное время выполнения сценария при 3 параллельных пользователях
+_metrics_collector.define_slo(
+    name="total_duration",
+    threshold=378.65,                # P95_baseline (252.43s) × 1.5 = 378.65s
     comparison="less_than"
 )
 
