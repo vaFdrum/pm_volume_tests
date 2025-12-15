@@ -58,7 +58,7 @@ _metrics_collector = MetricsCollector(test_name="TC-LOAD-001")
 # ✏️ Как изменить: замените 300 на реальное значение P95 * 1.2
 _metrics_collector.define_slo(
     name="dag1_duration",           # Имя метрики (НЕ МЕНЯТЬ!)
-    threshold=300,                   # ⬅️ ИЗМЕНИТЬ на основе P95 из отчета
+    threshold=62.1,                  # P95 (51.75s) × 1.2 = 62.1s
     comparison="less_than"           # Должно быть МЕНЬШЕ порога
 )
 
@@ -69,7 +69,7 @@ _metrics_collector.define_slo(
 # ✏️ Как изменить: замените 180 на реальное значение P95 * 1.2
 _metrics_collector.define_slo(
     name="dag2_duration",           # Имя метрики (НЕ МЕНЯТЬ!)
-    threshold=180,                   # ⬅️ ИЗМЕНИТЬ на основе P95 из отчета
+    threshold=123.85,                # P95 (103.21s) × 1.2 = 123.85s
     comparison="less_than"           # Должно быть МЕНЬШЕ порога
 )
 
@@ -80,7 +80,7 @@ _metrics_collector.define_slo(
 # ✏️ Как изменить: замените 3 на реальное значение P95 * 1.2
 _metrics_collector.define_slo(
     name="dashboard_duration",      # Имя метрики (НЕ МЕНЯТЬ!)
-    threshold=3,                     # ⬅️ ИЗМЕНИТЬ на основе P95 из отчета
+    threshold=0.77,                  # P95 (0.64s) × 1.2 = 0.77s
     comparison="less_than"           # Должно быть МЕНЬШЕ порога
 )
 
