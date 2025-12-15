@@ -373,6 +373,7 @@ baseline_metrics:
     dag1_duration: 51.77   # Max из TC-LOAD-001
     dag2_duration: 103.26  # Max из TC-LOAD-001
     dashboard_load: 0.65   # Max из TC-LOAD-001
+    total_duration: 253.57 # Max из TC-LOAD-001
   # "20gb":
   #   file_size_mb: 20480
   #   csv_upload: TBD

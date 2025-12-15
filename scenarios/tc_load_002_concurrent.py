@@ -87,6 +87,22 @@ _metrics_collector.define_slo(
     comparison="less_than"
 )
 
+# SLO #4: CSV Upload Time для Concurrent теста
+# 📝 Описание: Время загрузки CSV файла при 3 параллельных пользователях
+_metrics_collector.define_slo(
+    name="csv_upload_duration",
+    threshold=146.30,                # P95_baseline (97.53s) × 1.5 = 146.30s
+    comparison="less_than"
+)
+
+# SLO #5: Total Scenario Duration для Concurrent теста
+# 📝 Описание: Полное время выполнения сценария при 3 параллельных пользователях
+_metrics_collector.define_slo(
+    name="total_duration",
+    threshold=378.65,                # P95_baseline (252.43s) × 1.5 = 378.65s
+    comparison="less_than"
+)
+
 # ============================================================================
 # 📊 BASELINE METRICS SETUP
 # ============================================================================

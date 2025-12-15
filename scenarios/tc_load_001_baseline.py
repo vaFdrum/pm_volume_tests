@@ -84,22 +84,23 @@ _metrics_collector.define_slo(
     comparison="less_than"           # Должно быть МЕНЬШЕ порога
 )
 
-# 💡 ДОПОЛНИТЕЛЬНЫЕ SLO (опционально):
-# Раскомментируйте если нужны дополнительные проверки
-
 # SLO #4: CSV Upload Time
-# _metrics_collector.define_slo(
-#     name="csv_upload_duration",
-#     threshold=60,                   # ⬅️ Установите на основе данных
-#     comparison="less_than"
-# )
+# 📝 Описание: Время загрузки CSV файла
+# 📊 Где смотреть реальные данные: отчет -> "CSV Upload Time" -> "P95"
+_metrics_collector.define_slo(
+    name="csv_upload_duration",
+    threshold=117.04,                # P95 (97.53s) × 1.2 = 117.04s
+    comparison="less_than"
+)
 
 # SLO #5: Total Scenario Duration
-# _metrics_collector.define_slo(
-#     name="total_duration",
-#     threshold=600,                  # ⬅️ Установите на основе данных (10 минут)
-#     comparison="less_than"
-# )
+# 📝 Описание: Полное время выполнения сценария
+# 📊 Где смотреть реальные данные: отчет -> "Total Scenario Duration" -> "P95"
+_metrics_collector.define_slo(
+    name="total_duration",
+    threshold=302.92,                # P95 (252.43s) × 1.2 = 302.92s
+    comparison="less_than"
+)
 
 # ============================================================================
 # 📌 ВАЖНО:
