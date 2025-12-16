@@ -318,7 +318,7 @@ curl http://localhost:9090/metrics
 - Хранятся в `config_multi.yaml` секции `baseline_metrics`
 - Показывают насколько изменилась производительность
 - Используются для анализа деградации и трендов
-- Пример: `dag1_duration: 350s (baseline: 240s, +45%)`
+- Пример: `dag1_duration: 85s (baseline: 55.6s, +53%)` (3 concurrent users)
 
 **Зачем оба?**
 - **SLO** отвечает на вопрос: "Можно релизить?"

@@ -29,8 +29,8 @@ collector.define_slo("dag1_duration", threshold=300, comparison="less_than")
 collector.register_test_run({
     'success': True,
     'username': 'userNT_1',
-    'dag1_duration': 240.5,
-    'dag2_duration': 165.3,
+    'dag1_duration': 55.6,
+    'dag2_duration': 106.4,
     # ... other metrics
 })
 
@@ -273,9 +273,11 @@ collector.register_http_request({
 ```python
 # Для TC-LOAD-002 и выше - сравнение с baseline
 collector.set_baseline_metrics({
-    'csv_upload': 45.0,
-    'dag1_duration': 240.0,
-    'dag2_duration': 160.0
+    'csv_upload': 68.2,
+    'dag1_duration': 55.6,
+    'dag2_duration': 106.4,
+    'dashboard_load': 2.5,
+    'total_duration': 227.9
 })
 
 # Отчет автоматически покажет отклонение от baseline
@@ -461,7 +463,7 @@ json.dumps(data, default=str)
 **Решение**: Проверьте имена метрик - должны совпадать:
 ```python
 collector.define_slo("dag1_duration", ...)  # Имя SLO
-collector.register_test_run({'dag1_duration': 240})  # То же имя в метриках
+collector.register_test_run({'dag1_duration': 55.6})  # То же имя в метриках
 ```
 
 ## 📚 Дополнительная информация
