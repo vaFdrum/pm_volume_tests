@@ -398,6 +398,41 @@ log_level: "INFO"
 
 ## Разработка
 
+### Регистрация ошибок в тестах
+
+Все сценарии (TC-LOAD-001, TC-LOAD-002, TC-LOAD-003) используют единый паттерн регистрации ошибок через метод `_register_failure()`:
+
+```python
+def _register_failure(self, reason: str):
+    """Регистрирует неудачное выполнение сценария в метриках"""
+    get_metrics_collector().register_test_run({
+        'success': False,
+        'username': self.username,
+        'error': reason,
+        'csv_upload_duration': self.csv_upload_duration,
+        'dag1_duration': self.dag1_duration,
+        'dag2_duration': self.dag2_duration,
+    })
+    self._log_msg(f"Scenario failed: {reason}", logging.ERROR)
+```
+
+**Использование:** перед каждым `return` при ошибке:
+
+```python
+if not pm_result.get("success"):
+    self._register_failure("dag2_processing_failed")  # Регистрируем ошибку
+    return
+```
+
+**Типы ошибок:**
+- `authentication_failed` - ошибка авторизации
+- `flow_creation_failed` - не удалось создать flow
+- `dag1_processing_failed` - падение DAG #1 (ClickHouse Import)
+- `dag2_processing_failed` - падение DAG #2 (PM Dashboard)
+- И другие (см. код сценариев)
+
+Это обеспечивает корректный подсчёт **Success Rate** в отчётах.
+
 ### Добавление нового теста
 
 1. Создайте класс в `scenarios/`

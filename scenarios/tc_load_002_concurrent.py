@@ -216,6 +216,21 @@ class TC_LOAD_002_Concurrent(LoadApi):
         """Helper для упрощения логирования с автоматическим префиксом [TC-LOAD-002][username]"""
         self.log(f"[TC-LOAD-002][{self.username}] {message}", level)
 
+    def _register_failure(self, reason: str):
+        """
+        Регистрирует неудачное выполнение сценария в метриках
+        Используется для всех early returns чтобы правильно считать success rate
+        """
+        get_metrics_collector_002().register_test_run({
+            'success': False,
+            'username': self.username,
+            'error': reason,
+            'csv_upload_duration': self.csv_upload_duration,
+            'dag1_duration': self.dag1_duration,
+            'dag2_duration': self.dag2_duration,
+        })
+        self._log_msg(f"Scenario failed: {reason}", logging.ERROR)
+
     def establish_session(self):
         """Establish user session with authentication"""
         success = establish_session(
@@ -274,7 +289,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
         if not self.logged_in:
             self.establish_session()
             if not self.logged_in:
-                self.log("[TC-LOAD-002] Failed to establish session", logging.ERROR)
+                self._register_failure("authentication_failed")
                 return
 
         self._log_msg("Starting concurrent scenario")
@@ -291,7 +306,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             self.flow_id = flow_id
 
             if not flow_id:
-                self._log_msg("Failed to create flow", logging.ERROR)
+                self._register_failure("flow_creation_failed")
                 return
 
             self._log_msg(f"File flow created: {flow_name} (ID: {flow_id})")
@@ -299,7 +314,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             # 2. Получение параметров DAG
             target_connection, target_schema = self._get_dag_import_params(flow_id)
             if not target_connection or not target_schema:
-                self._log_msg("Missing DAG parameters", logging.ERROR)
+                self._register_failure("missing_dag_parameters")
                 return
 
             # 3. Обновление flow перед загрузкой
@@ -312,17 +327,17 @@ class TC_LOAD_002_Concurrent(LoadApi):
                 count_chunks_val=self.total_chunks,
             )
             if not update_resp or not update_resp.ok:
-                self._log_msg("Failed to update flow before upload", logging.ERROR)
+                self._register_failure("flow_update_failed")
                 return
 
             # 4. Получение ID базы данных пользователя
             db_id = self._get_user_database_id()
             if not db_id:
-                self._log_msg("User database not found", logging.ERROR)
+                self._register_failure("user_database_not_found")
                 return
 
             if self.total_chunks == 0:
-                self._log_msg("No chunks to upload", logging.WARNING)
+                self._register_failure("no_chunks_to_upload")
                 return
 
             timeout = (
@@ -334,6 +349,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             # 5. Начало загрузки
             csv_upload_start = time.time()
             if not self._start_file_upload(flow_id, db_id, target_schema, self.total_chunks, timeout):
+                self._register_failure("start_file_upload_failed")
                 return
 
             # 6. Загрузка чанков
@@ -344,6 +360,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
 
             # 7. Финализация загрузки
             if not self._finalize_file_upload(flow_id, uploaded_chunks, timeout):
+                self._register_failure("finalize_file_upload_failed")
                 return
 
             # ========== DAG #1: File Processing (ClickHouse Import) ==========
@@ -355,6 +372,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
                 flow_id, target_connection, target_schema, self.total_chunks, timeout
             )
             if not file_run_id:
+                self._register_failure("start_file_processing_failed")
                 return
 
             # 9. Мониторинг статуса обработки файла
@@ -365,7 +383,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             )
 
             if not success:
-                self._log_msg("DAG #1 processing failed", logging.ERROR)
+                self._register_failure("dag1_processing_failed")
                 return
 
             dag1_duration = time.time() - dag1_start
@@ -381,7 +399,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             # 10. Получаем параметры для PM блока
             source_connection, source_schema = self._get_dag_pm_params(flow_id)
             if not all([source_connection, source_schema]):
-                self._log_msg("Missing PM DAG parameters", logging.ERROR)
+                self._register_failure("missing_pm_dag_parameters")
                 return
 
             # 11. Создаем PM flow
@@ -395,7 +413,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             )
 
             if not pm_flow_id:
-                self._log_msg("Failed to create Process Mining flow", logging.ERROR)
+                self._register_failure("pm_flow_creation_failed")
                 return
 
             self.pm_flow_id = pm_flow_id
@@ -408,7 +426,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             )
 
             if not pm_run_id:
-                self._log_msg("Failed to start Process Mining flow", logging.ERROR)
+                self._register_failure("start_pm_flow_failed")
                 return
 
             # 13. Мониторинг статуса Process Mining
@@ -418,7 +436,7 @@ class TC_LOAD_002_Concurrent(LoadApi):
             )
 
             if not (isinstance(pm_result, dict) and pm_result.get("success")):
-                self._log_msg("DAG #2 processing failed", logging.ERROR)
+                self._register_failure("dag2_processing_failed")
                 return
 
             dag2_duration = time.time() - dag2_start
