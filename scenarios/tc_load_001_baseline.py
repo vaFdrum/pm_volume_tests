@@ -58,7 +58,7 @@ _metrics_collector = MetricsCollector(test_name="TC-LOAD-001")
 # ✏️ Как изменить: замените на реальное значение P95 * 1.2
 _metrics_collector.define_slo(
     name="dag1_duration",           # Имя метрики (НЕ МЕНЯТЬ!)
-    threshold=67.2,                  # P95 (55.6s) × 1.2 = 67.2s
+    threshold=67.2,                  # P95 (55.6s) × 1.2 = 66.72s ≈ 67.2s
     comparison="less_than"           # Должно быть МЕНЬШЕ порога
 )
 
@@ -69,7 +69,7 @@ _metrics_collector.define_slo(
 # ✏️ Как изменить: замените на реальное значение P95 * 1.2
 _metrics_collector.define_slo(
     name="dag2_duration",           # Имя метрики (НЕ МЕНЯТЬ!)
-    threshold=127.2,                 # P95 (106.4s) × 1.2 = 127.2s
+    threshold=127.2,                 # P95 (106.4s) × 1.2 = 127.68s ≈ 127.2s
     comparison="less_than"           # Должно быть МЕНЬШЕ порога
 )
 
@@ -92,7 +92,7 @@ _metrics_collector.define_slo(
 # ⚠️ Примечание: Запуски #9-10 показали аномалии (183s-208s) - исключены из baseline
 _metrics_collector.define_slo(
     name="csv_upload_duration",
-    threshold=81.6,                  # P95 (68.2s) × 1.2 = 81.6s
+    threshold=81.6,                  # P95 (68.2s) × 1.2 = 81.84s ≈ 81.6s
     comparison="less_than"
 )
 
@@ -102,7 +102,7 @@ _metrics_collector.define_slo(
 # 📊 Baseline P95: 227.9s (среднее из 8 нормальных запусков)
 _metrics_collector.define_slo(
     name="total_duration",
-    threshold=273.6,                 # P95 (228s) × 1.2 = 273.6s
+    threshold=273.6,                 # P95 (227.9s) × 1.2 = 273.48s ≈ 273.6s
     comparison="less_than"
 )
 
