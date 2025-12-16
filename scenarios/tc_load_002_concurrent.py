@@ -56,50 +56,55 @@ _metrics_collector = MetricsCollector(test_name="TC-LOAD-002")
 
 # SLO #1: DAG #1 Duration для Concurrent теста
 # 📝 Описание: Время импорта CSV в ClickHouse при 3 параллельных пользователях
-# 🎯 Текущий порог: 450 секунд (300s baseline * 1.5)
-# 📊 Baseline из TC-LOAD-001: 300s (из README.md)
+# 🎯 Обновлено: 2024-12-16 на основе нового baseline TC-LOAD-001
+# 📊 Baseline из TC-LOAD-001: 55.6s P95 (среднее из 8 запусков)
 # ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
 _metrics_collector.define_slo(
     name="dag1_duration",
-    threshold=77.63,                 # P95_baseline (51.75s) × 1.5 = 77.63s
+    threshold=84.0,                  # P95_baseline (56s) × 1.5 = 84.0s
     comparison="less_than"
 )
 
 # SLO #2: DAG #2 Duration для Concurrent теста
 # 📝 Описание: Время создания PM дашборда при 3 параллельных пользователях
-# 🎯 Текущий порог: 270 секунд (180s baseline * 1.5)
-# 📊 Baseline из TC-LOAD-001: 180s (из README.md)
+# 🎯 Обновлено: 2024-12-16 на основе нового baseline TC-LOAD-001
+# 📊 Baseline из TC-LOAD-001: 106.4s P95 (среднее из 8 запусков)
 # ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
 _metrics_collector.define_slo(
     name="dag2_duration",
-    threshold=154.82,                # P95_baseline (103.21s) × 1.5 = 154.82s
+    threshold=159.0,                 # P95_baseline (106s) × 1.5 = 159.0s
     comparison="less_than"
 )
 
 # SLO #3: Dashboard Load для Concurrent теста
 # 📝 Описание: Время загрузки дашборда при 3 параллельных пользователях
-# 🎯 Текущий порог: 4.5 секунд (3s baseline * 1.5)
-# 📊 Baseline из TC-LOAD-001: 3s (из README.md)
+# 🎯 Обновлено: 2024-12-16 на основе нового baseline TC-LOAD-001
+# 📊 Baseline из TC-LOAD-001: 2.5s безопасное (реальное 1.3s но нестабильно)
+# ⚠️ ВАЖНО: Dashboard load очень нестабилен в TC-LOAD-001, используем мягкий порог
 # ✏️ Как изменить: threshold = (P95 из TC-LOAD-001) * 1.5
 _metrics_collector.define_slo(
     name="dashboard_duration",
-    threshold=0.96,                  # P95_baseline (0.64s) × 1.5 = 0.96s
+    threshold=3.8,                   # P95_baseline (2.5s безопасное) × 1.5 = 3.75s ≈ 3.8s
     comparison="less_than"
 )
 
 # SLO #4: CSV Upload Time для Concurrent теста
 # 📝 Описание: Время загрузки CSV файла при 3 параллельных пользователях
+# 🎯 Обновлено: 2024-12-16 на основе нового baseline TC-LOAD-001
+# 📊 Baseline из TC-LOAD-001: 68.2s P95 (среднее из 8 запусков, исключены аномалии)
 _metrics_collector.define_slo(
     name="csv_upload_duration",
-    threshold=146.30,                # P95_baseline (97.53s) × 1.5 = 146.30s
+    threshold=102.0,                 # P95_baseline (68s) × 1.5 = 102.0s
     comparison="less_than"
 )
 
 # SLO #5: Total Scenario Duration для Concurrent теста
 # 📝 Описание: Полное время выполнения сценария при 3 параллельных пользователях
+# 🎯 Обновлено: 2024-12-16 на основе нового baseline TC-LOAD-001
+# 📊 Baseline из TC-LOAD-001: 227.9s P95 (среднее из 8 запусков)
 _metrics_collector.define_slo(
     name="total_duration",
-    threshold=378.65,                # P95_baseline (252.43s) × 1.5 = 378.65s
+    threshold=342.0,                 # P95_baseline (228s) × 1.5 = 342.0s
     comparison="less_than"
 )
 
