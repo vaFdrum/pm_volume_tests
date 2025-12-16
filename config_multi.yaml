@@ -365,7 +365,7 @@ clickhouse:
   monitoring_interval: 10  # Интервал сбора метрик в секундах
 
 # Baseline metrics для сравнения (TC-LOAD-002, TC-LOAD-003, etc.)
-# Обновлено: 2024-12-16 на основе 8 baseline запусков TC-LOAD-001
+# Обновлено: 2025-12-16 на основе 8 baseline запусков TC-LOAD-001
 baseline_metrics:
   "500mb":
     file_size_mb: 500
@@ -376,7 +376,7 @@ baseline_metrics:
     total_duration: 227.9    # P95 среднее из 8 запусков
     # Метаданные baseline
     baseline_runs: 8         # Количество валидных запусков
-    baseline_date: "2024-12-16"
+    baseline_date: "2025-12-16"
     notes: "Runs #9-10 excluded: CSV upload anomalies (183s-208s vs normal 55-80s)"
   # "20gb":
   #   file_size_mb: 20480
