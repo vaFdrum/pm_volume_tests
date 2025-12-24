@@ -161,8 +161,8 @@ class ProcessMetricsCalculator(LoadApi):
             self.log(f"File processing completed successfully for flow {flow_id}")
 
             # 10. Получаем параметры для PM блока
-            source_connection, source_schema, storage_connection= self._get_dag_pm_params(flow_id)
-            if not all([source_connection, source_schema, storage_connection]):
+            source_connection, source_schema = self._get_dag_pm_params(flow_id)
+            if not all([source_connection, source_schema]):
                 self.log("Missing PM DAG parameters", logging.ERROR)
                 return
 
