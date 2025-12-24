@@ -650,7 +650,7 @@ class LoadApi(SequentialTaskSet):
         )
         if not resp or not resp.ok:
             self.log(f"Failed to get PM DAG params. Status: {resp.status_code if resp else 'No response'}")
-            return None, None, None, None
+            return None, None
 
         source_connection = source_schema = None
         result_data = resp.json().get("result", [])
